@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Shared Packages · Multi-Tenancy Documentation · Clouda Glue</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="sb">
+    <div class="sb-brand"><span class="logo"></span>Clouda <span>Glue</span></div>
+    <div class="sb-sub">Multi-Tenancy Documentation</div>
+    <div class="sb-group">Getting started</div>
+    <a href="index.html">Overview</a>
+    <div class="sb-group">Architecture</div>
+    <a href="content-management.html"><span class="num">1</span> Content Management</a>
+    <a href="data-model.html"><span class="num">2</span> Data Model &amp; Isolation</a>
+    <a href="deployment.html"><span class="num">3</span> Deployment</a>
+    <a href="theming.html"><span class="num">4</span> Theming</a>
+    <a href="shared-packages.html" class="active"><span class="num">5</span> Shared Packages</a>
+    <a href="component-config.html"><span class="num">6</span> Component Configuration</a>
+    <div class="sb-group">Delivery</div>
+    <a href="roadmap.html"><span class="num">7</span> Roadmap &amp; Risks</a>
+  </nav>
+
+  <main class="content">
+    <div class="crumbs"><a href="index.html">Overview</a> &rsaquo; <b>Shared Packages</b></div>
+    <span class="eyebrow">Proposal · Architecture</span>
+    <h1>Shared workspace packages</h1>
+    <p class="lead">Two apps, one copy of the code that matters. Move the data-access layer into
+      <code>packages/db</code> and the reusable UI into <code>packages/components</code>, so glue-main and
+      glue-composer consume the same source instead of maintaining drifting duplicates.</p>
+    <div class="status">Proposed — awaiting approval. Nothing implemented yet.</div>
+
+    <h2>Why</h2>
+    <p>Today the MongoDB client (<code>startMongo.ts</code>) and the data-access files are <b>duplicated</b> across
+      glue-main and glue-composer, and the two copies have already started to <b>drift</b>. Meanwhile the reusable
+      UI components live only inside the published <code>@clouda-inc/glue-components</code> library, separate from the
+      apps that use them.</p>
+    <p>Multi-tenancy makes this worse: the tenant-scoping guarantee (every query filtered by <code>tenantId</code>)
+      has to be identical everywhere. Two copies means two places to get it right — and two places to get it wrong.</p>
+    <div class="warn"><b>The duplication is the risk.</b> If the scoping logic lives in two files, one of them will
+      eventually miss a filter and leak a tenant's data. There must be exactly one home for the isolation guarantee.</div>
+    <p>The fix: move shared code into <b>workspace packages</b> so both apps import one copy.</p>
+
+    <h2>Workspace layout</h2>
+    <p>The monorepo already uses npm workspaces. Add a <code>packages/*</code> glob alongside the two apps so any
+      package created under <code>packages/</code> is automatically linked into both.</p>
+
+    <div class="code">
+      <div class="label"><span>package.json (repo root)</span><span class="lang">json</span></div>
+<pre><code>{
+  <span class="c-at">"name"</span>: <span class="c-st">"clouda-monorepo"</span>,
+  <span class="c-at">"private"</span>: <span class="c-nm">true</span>,
+  <span class="c-at">"workspaces"</span>: [
+    <span class="c-st">"packages/*"</span>,        <span class="c-cm">// new — auto-links anything under packages/</span>
+    <span class="c-st">"glue-components"</span>,
+    <span class="c-st">"glue-main"</span>,
+    <span class="c-st">"glue-composer"</span>
+  ]
+}</code></pre>
+    </div>
+
+    <div class="diagram">
+      <svg viewBox="0 0 900 340" role="img" aria-label="packages/db and packages/components sit at the centre; both glue-main and glue-composer consume them.">
+        <defs>
+          <marker id="arw" markerWidth="11" markerHeight="11" refX="7.5" refY="3.4" orient="auto"><path d="M0,0 L8.4,3.4 L0,6.8 Z" fill="#f96f2d"></path></marker>
+          <style>
+            .bx{fill:#fff;stroke:#dfe4ec;stroke-width:1.5}
+            .pk{fill:#fff7f2;stroke:#ffcdb1;stroke-width:1.6}
+            .hd{font:700 15px var(--sans,sans-serif);fill:#171a21}
+            .sub{font:12.5px var(--sans,sans-serif);fill:#5c6673}
+            .lbl{font:600 12px var(--sans,sans-serif);fill:#8a94a2}
+            .flow{stroke:#f96f2d;stroke-width:2.4;fill:none}
+          </style>
+        </defs>
+
+        <!-- packages (centre) -->
+        <rect class="pk" x="330" y="60" width="240" height="66" rx="12"></rect>
+        <text class="hd" x="450" y="90" text-anchor="middle">packages/db</text>
+        <text class="sub" x="450" y="112" text-anchor="middle">mongo · tenants · repository</text>
+
+        <rect class="pk" x="330" y="210" width="240" height="66" rx="12"></rect>
+        <text class="hd" x="450" y="240" text-anchor="middle">packages/components</text>
+        <text class="sub" x="450" y="262" text-anchor="middle">shared UI · /theme tokens</text>
+
+        <!-- apps -->
+        <rect class="bx" x="40" y="135" width="210" height="66" rx="12"></rect>
+        <text class="hd" x="145" y="165" text-anchor="middle">glue-main</text>
+        <text class="sub" x="145" y="187" text-anchor="middle">per-tenant sites</text>
+
+        <rect class="bx" x="650" y="135" width="210" height="66" rx="12"></rect>
+        <text class="hd" x="755" y="165" text-anchor="middle">glue-composer</text>
+        <text class="sub" x="755" y="187" text-anchor="middle">shared CMS</text>
+
+        <!-- flows: apps consume packages -->
+        <path class="flow" d="M250,158 C295,140 305,118 328,102" marker-end="url(#arw)"></path>
+        <path class="flow" d="M250,180 C300,208 305,228 328,240" marker-end="url(#arw)"></path>
+        <path class="flow" d="M650,158 C605,140 595,118 572,102" marker-end="url(#arw)"></path>
+        <path class="flow" d="M650,180 C600,208 595,228 572,240" marker-end="url(#arw)"></path>
+        <text class="lbl" x="450" y="168" text-anchor="middle">both apps consume</text>
+      </svg>
+      <div class="cap">One copy of the shared code at the centre; both apps import it — nothing to keep in sync by hand.</div>
+    </div>
+
+    <h2>packages/db</h2>
+    <p>The shared data-access layer. It is the <b>single home for the isolation guarantee</b> and consists of three
+      pieces:</p>
+    <div class="grid c3">
+      <div class="card"><h4>mongo.ts</h4><p style="margin:2px 0 0">One merged <code>startMongo</code> — the connection/cache logic that today lives duplicated in both apps.</p></div>
+      <div class="card"><h4>tenants.ts</h4><p style="margin:2px 0 0"><code>getTenantBySlug</code> / <code>getTenantByDomain</code> — the <b>only</b> un-scoped queries in the codebase.</p></div>
+      <div class="card"><h4>repository.ts</h4><p style="margin:2px 0 0"><code>getTenantRepo(tenant)</code> force-injects <code>tenantId</code> on every read and write.</p></div>
+    </div>
+    <p>Both apps import from <code>@clouda/db</code>, so the duplication disappears and there is exactly one place
+      the scoping rules live.</p>
+
+    <div class="code">
+      <div class="label"><span>usage — glue-main &amp; glue-composer</span><span class="lang">ts</span></div>
+<pre><code><span class="c-cm">// same import in BOTH apps — one copy of the logic</span>
+<span class="c-kw">import</span> { getTenantBySlug, getTenantRepo } <span class="c-kw">from</span> <span class="c-st">"@clouda/db"</span>;
+
+<span class="c-kw">const</span> tenant = <span class="c-kw">await</span> getTenantBySlug(process.env.TENANT_SLUG!);
+<span class="c-kw">const</span> repo = getTenantRepo(tenant);
+
+<span class="c-cm">// tenantId is force-injected — callers never pass it, never forget it</span>
+<span class="c-kw">const</span> pages = <span class="c-kw">await</span> repo.webpageContent.find({ pagePath, status: <span class="c-st">"live"</span> });</code></pre>
+    </div>
+
+    <div class="tip"><b>CI gate.</b> Pair the package with an ESLint / CI rule that forbids raw collection access
+      (importing the Mongo client or calling <code>db.collection(...)</code>) anywhere outside <code>packages/db</code>.
+      That makes the scoping layer impossible to bypass by accident.</div>
+
+    <h2>packages/components</h2>
+    <p>Move the reusable UI into <code>packages/components</code> for reuse and consistency across both apps. This is
+      the <b>evolution of <code>@clouda-inc/glue-components</code></b> into a workspace package — the same ~64
+      components, now living beside the apps that consume them rather than only as a published artifact.</p>
+    <p>Expose the public surface through <code>exports</code> subpaths, including a dedicated <code>/theme</code>
+      entry for design tokens (the CSS-variable tokens described on the <a href="theming.html">Theming</a> page), so
+      an app can import components and theme tokens independently.</p>
+
+    <div class="code">
+      <div class="label"><span>packages/components/package.json</span><span class="lang">json</span></div>
+<pre><code>{
+  <span class="c-at">"name"</span>: <span class="c-st">"@clouda/components"</span>,
+  <span class="c-at">"version"</span>: <span class="c-st">"0.0.0"</span>,
+  <span class="c-at">"exports"</span>: {
+    <span class="c-at">"."</span>: <span class="c-st">"./src/index.ts"</span>,
+    <span class="c-at">"./theme"</span>: <span class="c-st">"./src/theme/index.ts"</span>
+  }
+}</code></pre>
+    </div>
+    <div class="note"><b>Both apps consume it.</b> glue-main renders tenant sites from these components; glue-composer
+      renders the same components in its editor preview — so the CMS shows exactly what visitors will see.</div>
+
+    <h2>Wiring into the apps</h2>
+    <p>Consume the workspace packages without a publish step during development: add them to
+      <code>transpilePackages</code> and mirror the <b>existing <code>@clouda-inc/glue-components</code> webpack alias</b>
+      already present in the Next config. Next.js then compiles the package source directly from the workspace.</p>
+
+    <div class="code">
+      <div class="label"><span>glue-main/next.config.mjs &amp; glue-composer/next.config.mjs (ESM, matching the real files)</span><span class="lang">js</span></div>
+<pre><code><span class="c-kw">import</span> path <span class="c-kw">from</span> <span class="c-st">"path"</span>;
+<span class="c-kw">import</span> { fileURLToPath } <span class="c-kw">from</span> <span class="c-st">"url"</span>;
+<span class="c-kw">const</span> __dirname = path.dirname(fileURLToPath(<span class="c-kw">import</span>.meta.url));
+
+<span class="c-cm">/** @type {import('next').NextConfig} */</span>
+<span class="c-kw">const</span> nextConfig = {
+  <span class="c-cm">// compile TS/JSX from the workspace packages — no build/publish needed</span>
+  transpilePackages: [<span class="c-st">"@clouda/db"</span>, <span class="c-st">"@clouda/components"</span>],
+
+  webpack(config) {
+    <span class="c-cm">// mirror the existing @clouda-inc/glue-components alias already in these files</span>
+    config.resolve.alias[<span class="c-st">"@clouda/components"</span>] =
+      path.resolve(__dirname, <span class="c-st">"../packages/components/src"</span>);
+    config.resolve.alias[<span class="c-st">"@clouda/db"</span>] =
+      path.resolve(__dirname, <span class="c-st">"../packages/db/src"</span>);
+    <span class="c-kw">return</span> config;
+  },
+};
+
+<span class="c-kw">export default</span> nextConfig;</code></pre>
+    </div>
+    <div class="ok"><b>Result.</b> Edit a file in <code>packages/db</code> or <code>packages/components</code> and both
+      apps pick it up on the next reload — no version bump, no CodeArtifact publish in the inner dev loop.</div>
+
+    <h2>Files touched</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Path</th><th>Change</th></tr></thead>
+        <tbody>
+          <tr><td><code>package.json</code> (root)</td><td>Add <code>"packages/*"</code> to the <code>workspaces</code> array.</td></tr>
+          <tr><td><code>packages/db/**</code></td><td>New package: <code>mongo.ts</code>, <code>tenants.ts</code>, <code>repository.ts</code> + <code>package.json</code>. The single home for tenant scoping.</td></tr>
+          <tr><td><code>packages/components/**</code></td><td>Reusable UI moved in from <code>@clouda-inc/glue-components</code>; <code>package.json</code> with <code>.</code> and <code>/theme</code> exports.</td></tr>
+          <tr><td><code>glue-main/next.config.mjs</code></td><td>Add <code>transpilePackages</code> + webpack aliases for both packages.</td></tr>
+          <tr><td><code>glue-composer/next.config.mjs</code></td><td>Same <code>transpilePackages</code> + alias wiring.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pagenav"><a class="prev" href="theming.html"><div class="dir">&larr; Prev</div><div class="ttl">4 &middot; Theming</div></a><a class="next" href="component-config.html"><div class="dir">Next &rarr;</div><div class="ttl">6 &middot; Component Configuration</div></a></div>
+    <div class="footer">Clouda Glue Solutions &middot; Multi-Tenancy Documentation &middot; Proposed &mdash; awaiting approval.</div>
+  </main>
+</div>
+</body>
+</html>

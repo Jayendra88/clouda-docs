@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Deployment · Multi-Tenancy Documentation · Clouda Glue</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="sb">
+    <div class="sb-brand"><span class="logo"></span>Clouda <span>Glue</span></div>
+    <div class="sb-sub">Multi-Tenancy Documentation</div>
+    <div class="sb-group">Getting started</div>
+    <a href="index.html">Overview</a>
+    <div class="sb-group">Architecture</div>
+    <a href="content-management.html"><span class="num">1</span> Content Management</a>
+    <a href="data-model.html"><span class="num">2</span> Data Model &amp; Isolation</a>
+    <a href="deployment.html" class="active"><span class="num">3</span> Deployment</a>
+    <a href="theming.html"><span class="num">4</span> Theming</a>
+    <a href="shared-packages.html"><span class="num">5</span> Shared Packages</a>
+    <a href="component-config.html"><span class="num">6</span> Component Configuration</a>
+    <div class="sb-group">Delivery</div>
+    <a href="roadmap.html"><span class="num">7</span> Roadmap &amp; Risks</a>
+  </nav>
+
+  <main class="content">
+    <div class="crumbs"><a href="index.html">Overview</a> &rsaquo; <b>Deployment</b></div>
+    <span class="eyebrow">Architecture · Application deployment</span>
+    <h1>Deployment</h1>
+    <p class="lead">One repository builds everything. <b>glue-main</b> is deployed once per tenant as its own AWS
+      Amplify app — each with a <code>TENANT_SLUG</code> and its own domain — while a single, shared
+      <b>glue-composer</b> app serves every tenant. Each build carries only its tenant's static content, which is a
+      strong isolation boundary in itself.</p>
+    <div class="status">Proposed — awaiting approval. Nothing implemented yet.</div>
+
+    <h2>1 · Topology</h2>
+    <p>The monorepo (npm workspaces) is the single source of truth. From it, Amplify builds two kinds of app: exactly
+      <b>one</b> shared <code>glue-composer</code>, and <b>one <code>glue-main</code> per tenant</b>. Every glue-main
+      app is an independent Amplify project with its own domain, environment, and CDN — but all of them come from the
+      same commit of the same repo.</p>
+
+    <div class="diagram">
+      <svg viewBox="0 0 1080 420" role="img" aria-label="One monorepo is built by AWS Amplify into a single shared glue-composer app and N per-tenant glue-main apps (Tenant A, B, C), each with its own TENANT_SLUG and domain.">
+        <defs>
+          <marker id="arw" markerWidth="11" markerHeight="11" refX="7.5" refY="3.4" orient="auto"><path d="M0,0 L8.4,3.4 L0,6.8 Z" fill="#f96f2d"></path></marker>
+          <style>
+            .bx{fill:#fff;stroke:#dfe4ec;stroke-width:1.5}
+            .band{fill:#f7f9fc;stroke:#e7ebf1;stroke-width:1.5}
+            .hd{font:700 15px var(--sans,sans-serif);fill:#171a21}
+            .hdl{font:700 14px var(--sans,sans-serif);fill:#171a21}
+            .sub{font:12.5px var(--sans,sans-serif);fill:#5c6673}
+            .subl{font:12px var(--sans,sans-serif);fill:#5c6673}
+            .lbl{font:600 12px var(--sans,sans-serif);fill:#8a94a2}
+            .flow{stroke:#f96f2d;stroke-width:2.4;fill:none}
+          </style>
+        </defs>
+
+        <rect class="bx" x="40" y="150" width="200" height="120" rx="14"></rect>
+        <text class="hd" x="140" y="200" text-anchor="middle">Monorepo</text>
+        <text class="sub" x="140" y="226" text-anchor="middle">one repository</text>
+
+        <rect class="band" x="330" y="168" width="150" height="84" rx="14"></rect>
+        <text class="hdl" x="405" y="205" text-anchor="middle">AWS Amplify</text>
+        <text class="sub" x="405" y="228" text-anchor="middle">build pipeline</text>
+
+        <rect x="580" y="40" width="440" height="72" rx="12" fill="#fff7f2" stroke="#ffcdb1" stroke-width="1.6"></rect>
+        <rect x="580" y="40" width="8" height="72" rx="4" fill="#f96f2d"></rect>
+        <text class="hdl" x="604" y="70">glue-composer &times; 1</text>
+        <text class="subl" x="604" y="92">single shared Amplify app · all tenants</text>
+
+        <rect class="bx" x="580" y="132" width="440" height="66" rx="12"></rect>
+        <rect x="580" y="132" width="8" height="66" rx="4" fill="#f96f2d"></rect>
+        <text class="hdl" x="604" y="160">glue-main — Tenant A</text>
+        <text class="subl" x="604" y="182">TENANT_SLUG=acme · acme.com</text>
+
+        <rect class="bx" x="580" y="216" width="440" height="66" rx="12"></rect>
+        <rect x="580" y="216" width="8" height="66" rx="4" fill="#0ea5a5"></rect>
+        <text class="hdl" x="604" y="244">glue-main — Tenant B</text>
+        <text class="subl" x="604" y="266">TENANT_SLUG=brandb · brandb.com</text>
+
+        <rect class="bx" x="580" y="300" width="440" height="66" rx="12"></rect>
+        <rect x="580" y="300" width="8" height="66" rx="4" fill="#7c5cff"></rect>
+        <text class="hdl" x="604" y="328">glue-main — Tenant C</text>
+        <text class="subl" x="604" y="350">TENANT_SLUG=brandc · brandc.com</text>
+
+        <path class="flow" d="M240,210 L328,210" marker-end="url(#arw)"></path>
+        <text class="lbl" x="284" y="200" text-anchor="middle">build</text>
+        <path class="flow" d="M480,196 C528,150 540,110 576,84" marker-end="url(#arw)"></path>
+        <path class="flow" d="M480,206 C528,196 540,178 576,166" marker-end="url(#arw)"></path>
+        <path class="flow" d="M480,220 C528,240 540,244 576,248" marker-end="url(#arw)"></path>
+        <path class="flow" d="M480,232 C528,300 540,318 576,332" marker-end="url(#arw)"></path>
+        <text class="lbl" x="524" y="128" text-anchor="middle">1 build / tenant</text>
+      </svg>
+      <div class="legend"><span><i></i> build / deploy</span><span><b style="background:#f96f2d"></b> Tenant A</span><span><b style="background:#0ea5a5"></b> Tenant B</span><span><b style="background:#7c5cff"></b> Tenant C</span></div>
+      <div class="cap">One repo, built by Amplify into one shared composer plus one glue-main app per tenant.</div>
+    </div>
+
+    <h2>2 · One glue-main build per tenant</h2>
+    <p>Each tenant's Amplify app is the <em>same</em> glue-main code with a different environment. The app sets
+      <code>TENANT_SLUG</code> (plus per-tenant secret references) as environment variables, and the existing
+      <code>glue-main/amplify.yml</code> is <b>reused unchanged</b> — the build reads the slug from the environment, so
+      there is nothing tenant-specific in the build spec.</p>
+
+    <div class="code"><div class="label"><span>Amplify app · environment variables (per tenant)</span><span class="lang">bash</span></div><pre><code><span class="c-cm"># Set on each tenant's Amplify app — the ONLY thing that differs between deploys</span>
+<span class="c-nm">TENANT_SLUG</span>=acme
+<span class="c-nm">TENANT_DOMAIN</span>=acme.com
+
+<span class="c-cm"># Per-tenant secret references (resolved at runtime from SSM / Secrets Manager)</span>
+<span class="c-nm">ZOHO_SECRET_ARN</span>=arn:aws:secretsmanager:us-east-1:123:secret:acme/zoho
+<span class="c-nm">DRAFT_SECRET_ARN</span>=arn:aws:ssm:us-east-1:123:parameter/acme/draft</code></pre></div>
+
+    <div class="code"><div class="label"><span>glue-main/amplify.yml — unchanged</span><span class="lang">yaml</span></div><pre><code><span class="c-at">version</span>: <span class="c-nm">1</span>
+<span class="c-at">frontend</span>:
+  <span class="c-at">phases</span>:
+    <span class="c-at">preBuild</span>:
+      <span class="c-at">commands</span>:
+        - npm ci
+    <span class="c-at">build</span>:
+      <span class="c-at">commands</span>:
+        <span class="c-cm"># reads process.env.TENANT_SLUG from the app's environment</span>
+        - npm run build --workspace glue-main
+  <span class="c-at">artifacts</span>:
+    <span class="c-at">baseDirectory</span>: glue-main/.next
+    <span class="c-at">files</span>:
+      - <span class="c-st">'**/*'</span></code></pre></div>
+
+    <div class="tip"><b>New tenant = one templated deploy.</b> Provision each glue-main app through IaC (a CDK or
+      Terraform Amplify module parameterised by <code>tenantSlug</code>, its domain(s), and secret ARNs). Onboarding a
+      tenant becomes a single parameter set applied by the pipeline — no code change, no hand-editing of the console.</div>
+
+    <h2>3 · Resolving the tenant</h2>
+    <p>A single helper, <code>glue-main/src/lib/tenant.ts</code>, decides which tenant a request belongs to. When the
+      app is pinned (the normal per-tenant deploy), it resolves straight from <code>process.env.TENANT_SLUG</code> —
+      that's the primary path. A <b>Host</b>-header fallback is kept in reserve for a possible future consolidated
+      deploy where one app fronts many domains. The whole thing is wrapped in React's <code>cache()</code> so it is
+      computed once per request.</p>
+
+    <div class="code"><div class="label"><span>glue-main/src/lib/tenant.ts</span><span class="lang">ts</span></div><pre><code><span class="c-kw">import</span> { cache } <span class="c-kw">from</span> <span class="c-st">'react'</span>;
+<span class="c-kw">import</span> { getTenantBySlug, getTenantByDomain } <span class="c-kw">from</span> <span class="c-st">'@clouda/db'</span>;
+
+<span class="c-cm">// Deduped per request. Pinned slug is primary; Host is a future-proofing fallback.</span>
+<span class="c-kw">export const</span> <span class="c-fn">resolveTenant</span> = <span class="c-fn">cache</span>(<span class="c-kw">async</span> (host?: <span class="c-at">string</span>) =&gt; {
+  <span class="c-kw">const</span> pinned = process.env.<span class="c-nm">TENANT_SLUG</span>;
+  <span class="c-kw">if</span> (pinned) <span class="c-kw">return</span> <span class="c-kw">await</span> <span class="c-fn">getTenantBySlug</span>(pinned);
+
+  <span class="c-cm">// Fallback: only used by a hypothetical consolidated multi-domain deploy.</span>
+  <span class="c-kw">if</span> (host) <span class="c-kw">return</span> <span class="c-kw">await</span> <span class="c-fn">getTenantByDomain</span>(host);
+
+  <span class="c-kw">throw new</span> <span class="c-fn">Error</span>(<span class="c-st">'Cannot resolve tenant: no TENANT_SLUG and no host'</span>);
+});</code></pre></div>
+
+    <h2>4 · Using the slug for data &amp; config</h2>
+    <p>The resolved tenant threads into <b>every</b> data call (so queries are scoped) and drives the configuration
+      that is <b>hardcoded today</b>. Values move to one of two places: non-secret settings onto the tenant record,
+      and secrets into AWS SSM Parameter Store / Secrets Manager keyed by slug.</p>
+    <div class="grid c2">
+      <div class="card"><h4>Onto the tenant record (non-secret)</h4><p style="margin:2px 0 0"><code>baseUrl</code> · GTM id (<code>GTM-KHHMJL8</code> today) · SEO / <code>metadataBase</code> · Zoho public IDs.</p></div>
+      <div class="card"><h4>Into SSM / Secrets Manager</h4><p style="margin:2px 0 0">Draft preview secret · Zoho API keys · any credential — referenced by the ARNs set in the app environment.</p></div>
+    </div>
+    <div class="warn"><b>Fixes a live bug.</b> Today <code>layout.tsx</code> uses <code>metadataBase: "clouda.com"</code>
+      while the shared constants say <code>clouda.io</code>. Reading <code>tenant.baseUrl</code> makes this correct
+      per tenant and removes the mismatch.</div>
+
+    <div class="code"><div class="label"><span>glue-main/src/app/layout.tsx (sketch)</span><span class="lang">tsx</span></div><pre><code><span class="c-kw">import</span> { headers } <span class="c-kw">from</span> <span class="c-st">'next/headers'</span>;
+<span class="c-kw">import</span> { resolveTenant } <span class="c-kw">from</span> <span class="c-st">'@/lib/tenant'</span>;
+
+<span class="c-kw">export async function</span> <span class="c-fn">generateMetadata</span>() {
+  <span class="c-kw">const</span> tenant = <span class="c-kw">await</span> <span class="c-fn">resolveTenant</span>();
+  <span class="c-kw">return</span> { metadataBase: <span class="c-kw">new</span> <span class="c-fn">URL</span>(tenant.baseUrl) };  <span class="c-cm">// was hardcoded "clouda.com"</span>
+}
+
+<span class="c-kw">export default async function</span> <span class="c-fn">RootLayout</span>({ children }: { children: <span class="c-at">React</span>.ReactNode }) {
+  <span class="c-kw">const</span> tenant = <span class="c-kw">await</span> <span class="c-fn">resolveTenant</span>();
+  <span class="c-kw">const</span> gtmId = tenant.analytics.gtmId;         <span class="c-cm">// was "GTM-KHHMJL8"</span>
+  <span class="c-kw">return</span> (
+    &lt;<span class="c-at">html</span>&gt;
+      &lt;<span class="c-at">head</span>&gt;&lt;<span class="c-fn">GoogleTagManager</span> <span class="c-at">id</span>={gtmId} /&gt;&lt;/<span class="c-at">head</span>&gt;
+      &lt;<span class="c-at">body</span>&gt;{children}&lt;/<span class="c-at">body</span>&gt;
+    &lt;/<span class="c-at">html</span>&gt;
+  );
+}</code></pre></div>
+
+    <h2>5 · Static generation &amp; fresh content</h2>
+    <p><code>generateStaticParams</code> scopes to the pinned tenant, so each build — and each tenant's CDN — holds
+      <b>only that tenant's HTML</b>. Nothing from another tenant is ever compiled into the bundle, which makes the
+      build itself a hard isolation boundary.</p>
+    <p>Because static output is frozen at build time, add <b>ISR</b> plus an on-demand
+      <code>POST /api/revalidate</code> guarded by a per-tenant secret. When an editor publishes in the composer, it
+      calls this route so the live site refreshes the affected paths <b>without a full rebuild</b>.</p>
+
+    <div class="code"><div class="label"><span>glue-main/src/app/api/revalidate/route.ts (sketch)</span><span class="lang">ts</span></div><pre><code><span class="c-kw">import</span> { revalidatePath } <span class="c-kw">from</span> <span class="c-st">'next/cache'</span>;
+<span class="c-kw">import</span> { resolveTenant } <span class="c-kw">from</span> <span class="c-st">'@/lib/tenant'</span>;
+
+<span class="c-kw">export async function</span> <span class="c-fn">POST</span>(req: <span class="c-at">Request</span>) {
+  <span class="c-kw">const</span> { path, secret } = <span class="c-kw">await</span> req.<span class="c-fn">json</span>();
+  <span class="c-kw">const</span> tenant = <span class="c-kw">await</span> <span class="c-fn">resolveTenant</span>();
+
+  <span class="c-cm">// Per-tenant secret resolved from SSM by slug (a secret — not stored on the tenant record).</span>
+  <span class="c-kw">const</span> expected = <span class="c-kw">await</span> <span class="c-fn">getSecret</span>(<span class="c-st">`/${tenant.slug}/revalidate`</span>);
+  <span class="c-kw">if</span> (secret !== expected) {
+    <span class="c-kw">return new</span> <span class="c-fn">Response</span>(<span class="c-st">'Unauthorized'</span>, { status: <span class="c-nm">401</span> });
+  }
+  <span class="c-fn">revalidatePath</span>(path);
+  <span class="c-kw">return</span> <span class="c-at">Response</span>.<span class="c-fn">json</span>({ revalidated: <span class="c-nm">true</span> });
+}</code></pre></div>
+
+    <div class="ok"><b>Net effect.</b> Publishing in the shared composer updates the correct tenant's live site in
+      seconds, each site stays a self-contained static bundle, and onboarding a new tenant is one parameterised deploy.</div>
+
+    <h2>Files touched</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>File</th><th>Change</th></tr></thead>
+      <tbody>
+        <tr><td><code>glue-main/src/lib/tenant.ts</code></td><td><span class="pick">New.</span> <code>resolveTenant()</code> wrapped in <code>cache()</code>; slug-first, Host fallback.</td></tr>
+        <tr><td><code>glue-main/src/app/layout.tsx</code></td><td>Read tenant <code>baseUrl</code> / <code>gtmId</code> / Zoho instead of hardcoded values.</td></tr>
+        <tr><td><code>glue-main/src/app/[...slug]/page.tsx</code></td><td><code>generateStaticParams</code> + <code>generateMetadata</code> scoped to the pinned tenant; ISR enabled.</td></tr>
+        <tr><td><code>glue-main/src/app/{sitemap,robots}.ts</code></td><td>Emit per-tenant <code>baseUrl</code> and paths.</td></tr>
+        <tr><td><code>glue-main/src/app/api/draft</code></td><td>Replace hardcoded secret with the per-tenant secret from SSM.</td></tr>
+        <tr><td><code>glue-main/src/app/api/revalidate</code></td><td><span class="pick">New.</span> On-demand revalidation, per-tenant secret, called by composer publish.</td></tr>
+        <tr><td>IaC Amplify module</td><td><span class="pick">New.</span> Templated per-tenant app parameterised by slug, domains, secret ARNs.</td></tr>
+        <tr><td><code>glue-main/amplify.yml</code></td><td><span class="badge later">unchanged</span> Build spec reused as-is across every tenant.</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="pagenav"><a class="prev" href="data-model.html"><div class="dir">&larr; Prev</div><div class="ttl">2 &middot; Data Model &amp; Isolation</div></a><a class="next" href="theming.html"><div class="dir">Next &rarr;</div><div class="ttl">4 &middot; Theming</div></a></div>
+    <div class="footer">Clouda Glue Solutions &middot; Multi-Tenancy Documentation &middot; Proposed &mdash; awaiting approval.</div>
+  </main>
+</div>
+</body>
+</html>

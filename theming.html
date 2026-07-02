@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Theming · Multi-Tenancy Documentation · Clouda Glue</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="sb">
+    <div class="sb-brand"><span class="logo"></span>Clouda <span>Glue</span></div>
+    <div class="sb-sub">Multi-Tenancy Documentation</div>
+    <div class="sb-group">Getting started</div>
+    <a href="index.html">Overview</a>
+    <div class="sb-group">Architecture</div>
+    <a href="content-management.html"><span class="num">1</span> Content Management</a>
+    <a href="data-model.html"><span class="num">2</span> Data Model &amp; Isolation</a>
+    <a href="deployment.html"><span class="num">3</span> Deployment</a>
+    <a href="theming.html" class="active"><span class="num">4</span> Theming</a>
+    <a href="shared-packages.html"><span class="num">5</span> Shared Packages</a>
+    <a href="component-config.html"><span class="num">6</span> Component Configuration</a>
+    <div class="sb-group">Delivery</div>
+    <a href="roadmap.html"><span class="num">7</span> Roadmap &amp; Risks</a>
+  </nav>
+
+  <main class="content">
+    <div class="crumbs"><a href="index.html">Overview</a> &rsaquo; <b>Theming</b></div>
+    <span class="eyebrow">Architecture · 4 of 7</span>
+    <h1>Theming</h1>
+    <p class="lead">Give each tenant its own look without forking components. Each tenant has one
+      <code>theme.json</code>; from it we render <b>tokens as CSS variables</b> (colour, shape) on the server, and put
+      <b>variants and behaviour</b> (hover style, scroll behaviour) on a React <b>context</b> via a
+      <code>ThemeProvider</code>. Components read the context and reflect it onto the markup, so the same
+      <code>HeaderMain</code> can differ in colour, shape, hover, and scroll behaviour per tenant.</p>
+    <div class="status">Proposed — awaiting approval. Nothing implemented yet.</div>
+
+    <div class="tip"><b>Companion documents.</b> This page is the doc-site version. The
+      <a href="../multi-tenancy-plan/theming.html">multi-tenancy-plan theming deep-dive</a> and
+      <a href="../multi-tenancy-plan/plan.md">plan.md</a> carry the extended worked example, the full token catalogue,
+      and the component-migration order this section is consistent with.</p></div>
+
+    <h2><span class="n">1</span>CSS variables instead of hardcoded values</h2>
+    <p>Components today bake in colours, borders, radii and spacing (the library is full of literal
+      <code>#F96F2D</code> and fixed pixels). The first move is to route those through <b>semantic CSS custom
+      properties</b> — a <code>--glue-*</code> token set — and map Tailwind onto the same tokens, so every existing
+      utility class (<code>bg-bg</code>, <code>text-fg</code>, <code>rounded</code>) becomes theme-aware for free.
+      Colours are stored as <b>space-separated RGB channels</b> so Tailwind's <code>&lt;alpha-value&gt;</code> still
+      works (e.g. <code>bg-surface/80</code>).</p>
+
+    <div class="code">
+      <div class="label"><span>packages/components/theme/tokens.css — the base (default Clouda) theme</span><span class="lang">css</span></div>
+<pre><code><span class="c-at">:root</span> {
+  <span class="c-cm">/* colours: RGB channels so `/ &lt;alpha-value&gt;` works */</span>
+  <span class="c-kw">--glue-color-bg</span>: <span class="c-nm">10 10 10</span>;
+  <span class="c-kw">--glue-color-fg</span>: <span class="c-nm">245 245 245</span>;
+  <span class="c-kw">--glue-color-brand</span>: <span class="c-nm">249 111 45</span>;      <span class="c-cm">/* #F96F2D */</span>
+  <span class="c-kw">--glue-color-surface</span>: <span class="c-nm">23 26 33</span>;
+  <span class="c-kw">--glue-color-surface-fg</span>: <span class="c-nm">245 245 245</span>;
+  <span class="c-cm">/* shape / type */</span>
+  <span class="c-kw">--glue-radius</span>: <span class="c-nm">14px</span>;
+  <span class="c-kw">--glue-font-sans</span>: <span class="c-st">"Inter", system-ui, sans-serif</span>;
+}
+</code></pre>
+    </div>
+
+    <div class="code">
+      <div class="label"><span>glue-components/tailwind.config.js — glue-main &amp; glue-composer use tailwind.config.ts (export default)</span><span class="lang">js</span></div>
+<pre><code><span class="c-kw">const</span> <span class="c-fn">rgb</span> = (v) =&gt; <span class="c-st">`rgb(var(${v}) / &lt;alpha-value&gt;)`</span>;
+
+<span class="c-kw">module</span>.exports = {
+  theme: { extend: {
+    colors: {
+      bg:        <span class="c-fn">rgb</span>(<span class="c-st">"--glue-color-bg"</span>),
+      fg:        <span class="c-fn">rgb</span>(<span class="c-st">"--glue-color-fg"</span>),
+      brand:     <span class="c-fn">rgb</span>(<span class="c-st">"--glue-color-brand"</span>),
+      surface:   <span class="c-fn">rgb</span>(<span class="c-st">"--glue-color-surface"</span>),
+      <span class="c-st">"surface-fg"</span>: <span class="c-fn">rgb</span>(<span class="c-st">"--glue-color-surface-fg"</span>),
+    },
+    borderRadius: { DEFAULT: <span class="c-st">"var(--glue-radius)"</span> },
+    fontFamily:   { sans: <span class="c-st">"var(--glue-font-sans)"</span> },
+  } },
+};
+</code></pre>
+    </div>
+    <div class="tip"><b>Tokens are an additive fallback.</b> An explicit prop always wins; the token is only the
+      fallback — <code>style={{ background: props.bg ?? "rgb(var(--glue-color-surface))" }}</code>. An un-migrated
+      component keeps behaving exactly as before, so you migrate one component at a time.</div>
+
+    <h2><span class="n">2</span>One <code>theme.json</code> per tenant</h2>
+    <p>Each tenant/brand has a single <b><code>theme.json</code></b> — the one source of truth for its look. It holds
+      three things:</p>
+    <div class="grid c3">
+      <div class="card"><h4>tokens</h4><p style="margin:2px 0 0">Values for the <code>--glue-*</code> variables (colour channels, radius, font). These become <b>CSS variables</b> (Section 3).</p></div>
+      <div class="card"><h4>variants</h4><p style="margin:2px 0 0">Structural choices the theme selects — e.g. header <code>shape: "pill" | "square"</code>. Delivered via <b>context</b>.</p></div>
+      <div class="card"><h4>behaviour</h4><p style="margin:2px 0 0">Interaction flags — hover style, scroll behaviour. Also delivered via <b>context</b> and branched on in JS.</p></div>
+    </div>
+
+    <div class="code">
+      <div class="label"><span>glue-main/src/themes/acme.json</span><span class="lang">json</span></div>
+<pre><code>{
+  <span class="c-at">"name"</span>: <span class="c-st">"acme"</span>,
+  <span class="c-at">"tokens"</span>: {
+    <span class="c-at">"color-bg"</span>: <span class="c-st">"255 255 255"</span>,
+    <span class="c-at">"color-fg"</span>: <span class="c-st">"17 24 39"</span>,
+    <span class="c-at">"color-brand"</span>: <span class="c-st">"37 99 235"</span>,        <span class="c-cm">// Acme blue</span>
+    <span class="c-at">"color-surface"</span>: <span class="c-st">"248 250 252"</span>,
+    <span class="c-at">"color-surface-fg"</span>: <span class="c-st">"17 24 39"</span>,
+    <span class="c-at">"radius"</span>: <span class="c-st">"4px"</span>,                       <span class="c-cm">// sharper corners</span>
+    <span class="c-at">"font-sans"</span>: <span class="c-st">"Poppins, system-ui, sans-serif"</span>
+  },
+  <span class="c-at">"variants"</span>:  { <span class="c-at">"header"</span>: { <span class="c-at">"shape"</span>: <span class="c-st">"pill"</span> } },
+  <span class="c-at">"behaviour"</span>: { <span class="c-at">"header"</span>: { <span class="c-at">"hover"</span>: <span class="c-st">"underline"</span>, <span class="c-at">"scroll"</span>: <span class="c-st">"solid"</span> } }
+}
+</code></pre>
+    </div>
+
+    <p>The shape is typed once, in the shared package, so a theme can't request a variant or behaviour that doesn't
+      exist:</p>
+    <div class="code">
+      <div class="label"><span>packages/components/theme/types.ts</span><span class="lang">ts</span></div>
+<pre><code><span class="c-kw">export type</span> HeaderShape  = <span class="c-st">"flat"</span> | <span class="c-st">"pill"</span> | <span class="c-st">"square"</span>;
+<span class="c-kw">export type</span> HeaderHover  = <span class="c-st">"underline"</span> | <span class="c-st">"fill"</span> | <span class="c-st">"none"</span>;
+<span class="c-kw">export type</span> HeaderScroll = <span class="c-st">"fade"</span> | <span class="c-st">"solid"</span> | <span class="c-st">"hide"</span> | <span class="c-st">"shrink"</span>;
+
+<span class="c-kw">export interface</span> <span class="c-fn">Theme</span> {
+  name: <span class="c-fn">string</span>;
+  tokens: <span class="c-fn">Record</span>&lt;<span class="c-fn">string</span>, <span class="c-fn">string</span>&gt;;                 <span class="c-cm">// var name (no --glue-) -&gt; value</span>
+  variants:  { header: { shape: HeaderShape } };
+  behaviour: { header: { hover: HeaderHover; scroll: HeaderScroll } };
+}
+</code></pre>
+    </div>
+
+    <h2><span class="n">3</span>Loading <code>theme.json</code> by tenant &amp; injecting tokens</h2>
+    <p>Because glue-main runs one deploy per tenant, the active tenant is known from <code>TENANT_SLUG</code>. A tiny
+      <b>registry</b> maps the slug to its imported <code>theme.json</code> (falling back to the base theme for an
+      unknown slug). A DB-backed loader could replace this later without changing callers.</p>
+
+    <div class="code">
+      <div class="label"><span>glue-main/src/themes/index.ts — slug → Theme</span><span class="lang">ts</span></div>
+<pre><code><span class="c-kw">import type</span> { Theme } <span class="c-kw">from</span> <span class="c-st">"@clouda/components/theme"</span>;
+<span class="c-kw">import</span> base   <span class="c-kw">from</span> <span class="c-st">"./base.json"</span>;      <span class="c-cm">// default Clouda theme</span>
+<span class="c-kw">import</span> acme   <span class="c-kw">from</span> <span class="c-st">"./acme.json"</span>;
+<span class="c-kw">import</span> brandb <span class="c-kw">from</span> <span class="c-st">"./brandb.json"</span>;
+
+<span class="c-kw">const</span> registry: <span class="c-fn">Record</span>&lt;<span class="c-fn">string</span>, Theme&gt; = { acme, brandb };
+
+<span class="c-kw">export function</span> <span class="c-fn">getTheme</span>(slug: <span class="c-fn">string</span>): Theme {
+  <span class="c-kw">return</span> (registry[slug] ?? base) <span class="c-kw">as</span> Theme;   <span class="c-cm">// unknown slug -&gt; base defaults</span>
+}
+</code></pre>
+    </div>
+
+    <p>The token half is turned into a <code>:root { … }</code> string and injected as a <code>&lt;style&gt;</code> in
+      the server-rendered <code>&lt;head&gt;</code> — so the correct colours are present on the very first paint (no
+      flash of the wrong theme):</p>
+
+    <div class="code">
+      <div class="label"><span>glue-main/src/lib/theme.ts — tokens → CSS variables</span><span class="lang">ts</span></div>
+<pre><code><span class="c-kw">export function</span> <span class="c-fn">themeToCssVars</span>(tokens: <span class="c-fn">Record</span>&lt;<span class="c-fn">string</span>, <span class="c-fn">string</span>&gt;): <span class="c-fn">string</span> {
+  <span class="c-kw">const</span> body = <span class="c-fn">Object</span>.entries(tokens)
+    .map(([name, value]) =&gt; <span class="c-st">`--glue-${name}: ${value};`</span>)
+    .join(<span class="c-st">" "</span>);
+  <span class="c-kw">return</span> <span class="c-st">`:root { ${body} }`</span>;   <span class="c-cm">// e.g. ":root { --glue-color-brand: 37 99 235; … }"</span>
+}
+</code></pre>
+    </div>
+
+    <p>The root layout ties it together: load the tenant's theme, inject the tokens, and wrap the app in the
+      <code>ThemeProvider</code> so the <b>variants + behaviour</b> reach every component through context.</p>
+
+    <div class="code">
+      <div class="label"><span>glue-main/src/app/layout.tsx</span><span class="lang">tsx</span></div>
+<pre><code><span class="c-kw">import</span> { getTheme } <span class="c-kw">from</span> <span class="c-st">"@/themes"</span>;
+<span class="c-kw">import</span> { themeToCssVars } <span class="c-kw">from</span> <span class="c-st">"@/lib/theme"</span>;
+<span class="c-kw">import</span> { ThemeProvider } <span class="c-kw">from</span> <span class="c-st">"@clouda/components/theme"</span>;
+
+<span class="c-kw">export default async function</span> <span class="c-fn">RootLayout</span>({ children }: { children: <span class="c-at">React</span>.ReactNode }) {
+  <span class="c-kw">const</span> slug  = process.env.<span class="c-nm">TENANT_SLUG</span>!;   <span class="c-cm">// set per Amplify deploy</span>
+  <span class="c-kw">const</span> theme = <span class="c-fn">getTheme</span>(slug);              <span class="c-cm">// this tenant's theme.json</span>
+  <span class="c-kw">const</span> vars  = <span class="c-fn">themeToCssVars</span>(theme.tokens);
+
+  <span class="c-kw">return</span> (
+    &lt;<span class="c-at">html</span> <span class="c-fn">lang</span>=<span class="c-st">"en"</span> <span class="c-fn">data-tenant</span>={slug}&gt;
+      &lt;<span class="c-at">head</span>&gt;
+        {<span class="c-cm">/* tokens as CSS variables — server-rendered, no FOUC */</span>}
+        &lt;<span class="c-at">style</span> <span class="c-fn">id</span>=<span class="c-st">"glue-theme"</span> <span class="c-fn">dangerouslySetInnerHTML</span>={{ __html: vars }} /&gt;
+      &lt;/<span class="c-at">head</span>&gt;
+      &lt;<span class="c-at">body</span>&gt;
+        {<span class="c-cm">/* variants + behaviour travel via React context */</span>}
+        &lt;<span class="c-fn">ThemeProvider</span> <span class="c-fn">value</span>={theme}&gt;{children}&lt;/<span class="c-fn">ThemeProvider</span>&gt;
+      &lt;/<span class="c-at">body</span>&gt;
+    &lt;/<span class="c-at">html</span>&gt;
+  );
+}
+</code></pre>
+    </div>
+    <div class="note"><b>Two channels, one source.</b> <code>theme.json</code> is loaded once; its <b>tokens</b> go out
+      as CSS (styling that CSS can express), and its <b>variants + behaviour</b> go into context (choices JS must read).
+      Both come from the same file, so a tenant is configured in exactly one place.</div>
+
+    <h2><span class="n">4</span>The <code>ThemeProvider</code> and <code>useTheme</code> hook</h2>
+    <p>The provider is a small <b>client</b> component in the shared package: it creates a React context and exposes a
+      <code>useTheme()</code> hook that returns the current tenant's <code>Theme</code>. It throws if used outside a
+      provider, so a component can never silently render without a theme.</p>
+
+    <div class="code">
+      <div class="label"><span>packages/components/theme/ThemeProvider.tsx</span><span class="lang">tsx</span></div>
+<pre><code><span class="c-st">"use client"</span>;
+<span class="c-kw">import</span> { createContext, useContext } <span class="c-kw">from</span> <span class="c-st">"react"</span>;
+<span class="c-kw">import type</span> { Theme } <span class="c-kw">from</span> <span class="c-st">"./types"</span>;
+
+<span class="c-cm">// null default lets useTheme() detect "used outside a provider"</span>
+<span class="c-kw">const</span> ThemeContext = <span class="c-fn">createContext</span>&lt;Theme | <span class="c-kw">null</span>&gt;(<span class="c-kw">null</span>);
+
+<span class="c-kw">export function</span> <span class="c-fn">ThemeProvider</span>(
+  { value, children }: { value: Theme; children: <span class="c-at">React</span>.ReactNode }
+) {
+  <span class="c-kw">return</span> &lt;<span class="c-fn">ThemeContext.Provider</span> <span class="c-fn">value</span>={value}&gt;{children}&lt;/<span class="c-fn">ThemeContext.Provider</span>&gt;;
+}
+
+<span class="c-kw">export function</span> <span class="c-fn">useTheme</span>(): Theme {
+  <span class="c-kw">const</span> theme = <span class="c-fn">useContext</span>(ThemeContext);
+  <span class="c-kw">if</span> (!theme) <span class="c-kw">throw new</span> <span class="c-fn">Error</span>(<span class="c-st">"useTheme must be used within &lt;ThemeProvider&gt;"</span>);
+  <span class="c-kw">return</span> theme;
+}
+</code></pre>
+    </div>
+    <div class="tip"><b>Server-safe.</b> The provider is a client component, but it only wraps <code>children</code>; the
+      root layout stays a server component. Because the token CSS is injected server-side (Section 3), the base look is
+      correct even before React hydrates — the context only drives <b>variant/behaviour</b> decisions, which are
+      interactive concerns anyway.</div>
+
+    <h2><span class="n">5</span>Components read the context &amp; apply styles</h2>
+    <p>A themed component reads its <b>variants + behaviour</b> from <code>useTheme()</code> and reflects them onto
+      <b>data-attributes</b>; the CSS keys on those attributes and pulls colours from the <b>tokens</b>. Colour and
+      simple shape are pure CSS (no per-tenant code); the one genuinely dynamic behaviour — scroll — comes from a hook
+      (Section 6). This is exactly how the same <code>HeaderMain</code> renders differently per tenant.</p>
+
+    <div class="code">
+      <div class="label"><span>packages/components/src/HeaderMain/HeaderMain.tsx</span><span class="lang">tsx</span></div>
+<pre><code><span class="c-st">"use client"</span>;
+<span class="c-kw">import</span> { useTheme } <span class="c-kw">from</span> <span class="c-st">"@clouda/components/theme"</span>;
+<span class="c-kw">import</span> { useScrolledPastTop } <span class="c-kw">from</span> <span class="c-st">"@clouda/components/hooks"</span>;
+
+<span class="c-kw">export function</span> <span class="c-fn">HeaderMain</span>({ links, bg }: HeaderProps) {
+  <span class="c-cm">// read the tenant's choices from context</span>
+  <span class="c-kw">const</span> { variants, behaviour } = <span class="c-fn">useTheme</span>();
+  <span class="c-kw">const</span> { shape } = variants.header;              <span class="c-cm">// "pill" | "square" | "flat"</span>
+  <span class="c-kw">const</span> { hover, scroll } = behaviour.header;      <span class="c-cm">// hover + scroll modes</span>
+  <span class="c-kw">const</span> solid = <span class="c-fn">useScrolledPastTop</span>(<span class="c-nm">78</span>);           <span class="c-cm">// true once scrolled past 78px</span>
+
+  <span class="c-kw">return</span> (
+    &lt;<span class="c-at">header</span>
+      <span class="c-fn">className</span>=<span class="c-st">"headerMain"</span>
+      <span class="c-fn">data-shape</span>={shape}
+      <span class="c-fn">data-hover</span>={hover}
+      <span class="c-fn">data-scroll</span>={scroll}
+      <span class="c-fn">data-solid</span>={solid ? <span class="c-st">"true"</span> : <span class="c-st">"false"</span>}
+      <span class="c-cm">// explicit prop still wins; the token is only the fallback (precedence)</span>
+      <span class="c-fn">style</span>={{ background: bg ?? <span class="c-st">"rgb(var(--glue-color-surface))"</span> }}
+    &gt;
+      {links.map((l) =&gt; (
+        &lt;<span class="c-at">a</span> <span class="c-fn">key</span>={l.href} <span class="c-fn">href</span>={l.href} <span class="c-fn">className</span>=<span class="c-st">"navLink"</span>&gt;{l.label}&lt;/<span class="c-at">a</span>&gt;
+      ))}
+    &lt;/<span class="c-at">header</span>&gt;
+  );
+}
+</code></pre>
+    </div>
+
+    <div class="code">
+      <div class="label"><span>packages/components/src/HeaderMain/HeaderMain.css</span><span class="lang">css</span></div>
+<pre><code><span class="c-cm">/* shape variant → declarative CSS */</span>
+<span class="c-at">.headerMain[data-shape="pill"]</span> <span class="c-at">.navLink</span>   { <span class="c-kw">border-radius</span>: <span class="c-nm">999px</span>; }
+<span class="c-at">.headerMain[data-shape="square"]</span> <span class="c-at">.navLink</span> { <span class="c-kw">border-radius</span>: <span class="c-nm">0</span>; }
+
+<span class="c-cm">/* hover behaviour → declarative CSS, colours from tokens */</span>
+<span class="c-at">.headerMain[data-hover="underline"]</span> <span class="c-at">.navLink:hover</span> { <span class="c-kw">text-decoration</span>: <span class="c-nm">underline</span>; }
+<span class="c-at">.headerMain[data-hover="fill"]</span> <span class="c-at">.navLink:hover</span> {
+  <span class="c-kw">background</span>: <span class="c-fn">rgb</span>(<span class="c-kw">var</span>(--glue-color-brand));
+  <span class="c-kw">color</span>:      <span class="c-fn">rgb</span>(<span class="c-kw">var</span>(--glue-color-surface-fg));
+}
+
+<span class="c-cm">/* scroll behaviour → driven by data-solid (from the hook) + data-scroll */</span>
+<span class="c-at">.headerMain[data-scroll="solid"][data-solid="true"]</span> {
+  <span class="c-kw">background</span>: <span class="c-fn">rgb</span>(<span class="c-kw">var</span>(--glue-color-surface));
+}
+</code></pre>
+    </div>
+    <div class="warn"><b>What this retires.</b> The real <code>HeaderMain</code> hardcodes <code>#F96F2D</code> and guesses
+      light-vs-dark with a brittle <code>isLightTheame</code> hex check plus <code>AutoSwapColor.ts</code>. Both go away:
+      paired <b>surface</b>/<b>surface-fg</b> tokens carry a guaranteed-legible foreground, so no colour is inferred at
+      runtime.</div>
+
+    <h2><span class="n">6</span><code>useScrolledPastTop</code> — the scroll hook</h2>
+    <p><b>What it does:</b> a small client hook that returns a boolean — <code>false</code> at the top of the page and
+      <code>true</code> once the user has scrolled past a <code>threshold</code> (in pixels). It is the one dynamic input
+      the header needs: "have we scrolled down far enough to change the header?" The <code>HeaderMain</code> above feeds
+      its result into <code>data-solid</code>, and the CSS turns the header opaque (or, for other modes, shrinks/hides
+      it). Keeping the scroll logic in a hook means the component stays declarative and the behaviour is reusable.</p>
+    <ul>
+      <li>Starts <code>false</code> on the server and first paint, so SSR and hydration match (no mismatch warning).</li>
+      <li>Listens with a <code>passive</code> scroll listener throttled by <code>requestAnimationFrame</code> — cheap, no layout thrash.</li>
+      <li>Syncs once on mount (so a reload part-way down the page is correct) and cleans up on unmount.</li>
+    </ul>
+
+    <div class="code">
+      <div class="label"><span>packages/components/hooks/useScrolledPastTop.ts</span><span class="lang">ts</span></div>
+<pre><code><span class="c-st">"use client"</span>;
+<span class="c-kw">import</span> { useState, useEffect } <span class="c-kw">from</span> <span class="c-st">"react"</span>;
+
+<span class="c-cm">// true once the page has scrolled past `threshold` px from the top.</span>
+<span class="c-kw">export function</span> <span class="c-fn">useScrolledPastTop</span>(threshold = <span class="c-nm">0</span>): <span class="c-fn">boolean</span> {
+  <span class="c-kw">const</span> [past, setPast] = <span class="c-fn">useState</span>(<span class="c-kw">false</span>);   <span class="c-cm">// false on server &amp; first paint</span>
+
+  <span class="c-fn">useEffect</span>(() =&gt; {
+    <span class="c-kw">let</span> ticking = <span class="c-kw">false</span>;
+    <span class="c-kw">const</span> onScroll = () =&gt; {
+      <span class="c-kw">if</span> (ticking) <span class="c-kw">return</span>;
+      ticking = <span class="c-kw">true</span>;
+      <span class="c-fn">requestAnimationFrame</span>(() =&gt; {
+        <span class="c-fn">setPast</span>(window.scrollY &gt; threshold);
+        ticking = <span class="c-kw">false</span>;
+      });
+    };
+    <span class="c-fn">onScroll</span>();                                   <span class="c-cm">// sync to current position on mount</span>
+    window.<span class="c-fn">addEventListener</span>(<span class="c-st">"scroll"</span>, onScroll, { passive: <span class="c-kw">true</span> });
+    <span class="c-kw">return</span> () =&gt; window.<span class="c-fn">removeEventListener</span>(<span class="c-st">"scroll"</span>, onScroll);
+  }, [threshold]);
+
+  <span class="c-kw">return</span> past;
+}
+</code></pre>
+    </div>
+    <div class="tip"><b>Why a hook, not inline scroll code.</b> The real header wires its own <code>scroll</code> listener
+      and a <code>react-headroom</code> wrapper. Extracting "am I past the top?" into <code>useScrolledPastTop</code> lets
+      several components (header, back-to-top button, sticky bars) share one throttled listener contract, and keeps the
+      behaviour testable in isolation.</div>
+
+    <h2><span class="n">7</span>Precedence</h2>
+    <p>Everything is a fallback chain, most-general to most-specific. An explicit prop or block setting always wins; the
+      token is only what fills in when nothing more specific was provided.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Level</th><th>Source</th><th>Wins over</th></tr></thead>
+        <tbody>
+          <tr><td><span class="pick">Tenant theme</span></td><td><code>:root</code> vars from <code>theme.json</code> tokens (Section 3)</td><td>the base <code>tokens.css</code> defaults</td></tr>
+          <tr><td><span class="pick">Page override</span></td><td>a token redefined on a page wrapper / scope</td><td>the tenant theme <code>:root</code></td></tr>
+          <tr><td><span class="pick">Block override</span></td><td>an explicit prop on the block (e.g. <code>bg=</code>)</td><td>everything — the token is only its fallback</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>In one line: <b>tenant theme (<code>:root</code>) &lt; page override &lt; block override</b>. Because tokens are
+      additive fallbacks (Section 1), an un-migrated block that still passes an explicit colour just keeps working.</p>
+
+    <h2>Files touched</h2>
+    <div class="card">
+      <ul style="margin:0">
+        <li><code>packages/components/theme/tokens.css</code> — base <code>--glue-*</code> token set (RGB-channel colours).</li>
+        <li><code>packages/components/theme/types.ts</code> — the <code>Theme</code> type: tokens + variant names + behaviour flags.</li>
+        <li><code>packages/components/theme/ThemeProvider.tsx</code> — <span class="badge mvp">new</span> the context provider + <code>useTheme()</code> hook.</li>
+        <li><code>packages/components/hooks/useScrolledPastTop.ts</code> — <span class="badge mvp">new</span> shared scroll hook powering scroll-driven header behaviour.</li>
+        <li><code>glue-main/src/themes/&lt;slug&gt;.json</code> — one <code>theme.json</code> per tenant (tokens + variants + behaviour).</li>
+        <li><code>glue-main/src/themes/index.ts</code> — <code>getTheme(slug)</code> registry / loader.</li>
+        <li><code>glue-main/src/lib/theme.ts</code> — <code>themeToCssVars(tokens)</code>.</li>
+        <li><code>tailwind.config.*</code> (×3 — <code>.ts</code> for glue-main &amp; glue-composer, <code>.js</code> for glue-components) — map colours/radius/fonts to <code>rgb(var(--glue-*) / &lt;alpha-value&gt;)</code>.</li>
+        <li><code>glue-main/src/app/layout.tsx</code> — load the tenant theme, inject token CSS, wrap in <code>ThemeProvider</code>.</li>
+        <li><code>HeaderMain</code> + component waves — read <code>useTheme()</code>, apply data-attributes + tokens; retire <code>isLightTheame</code> / <code>AutoSwapColor.ts</code>.</li>
+      </ul>
+    </div>
+
+    <div class="pagenav"><a class="prev" href="deployment.html"><div class="dir">&larr; Prev</div><div class="ttl">3 &middot; Deployment</div></a><a class="next" href="shared-packages.html"><div class="dir">Next &rarr;</div><div class="ttl">5 &middot; Shared Packages</div></a></div>
+    <div class="footer">Clouda Glue Solutions &middot; Multi-Tenancy Documentation &middot; Proposed &mdash; awaiting approval.</div>
+  </main>
+</div>
+</body>
+</html>

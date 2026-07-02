@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Data Model &amp; Isolation · Multi-Tenancy Documentation · Clouda Glue</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="sb">
+    <div class="sb-brand"><span class="logo"></span>Clouda <span>Glue</span></div>
+    <div class="sb-sub">Multi-Tenancy Documentation</div>
+    <div class="sb-group">Getting started</div>
+    <a href="index.html">Overview</a>
+    <div class="sb-group">Architecture</div>
+    <a href="content-management.html"><span class="num">1</span> Content Management</a>
+    <a href="data-model.html" class="active"><span class="num">2</span> Data Model &amp; Isolation</a>
+    <a href="deployment.html"><span class="num">3</span> Deployment</a>
+    <a href="theming.html"><span class="num">4</span> Theming</a>
+    <a href="shared-packages.html"><span class="num">5</span> Shared Packages</a>
+    <a href="component-config.html"><span class="num">6</span> Component Configuration</a>
+    <div class="sb-group">Delivery</div>
+    <a href="roadmap.html"><span class="num">7</span> Roadmap &amp; Risks</a>
+  </nav>
+
+  <main class="content">
+    <div class="crumbs"><a href="index.html">Overview</a> &rsaquo; <b>Data Model &amp; Isolation</b></div>
+    <span class="eyebrow">Architecture · 2 of 7</span>
+    <h1>Data Model &amp; Isolation</h1>
+    <p class="lead">Introduce a single tenant slug into the database and make it impossible to read or write
+      un-scoped. Every tenant-owned document gains a <code>tenantId</code>, three new collections describe tenants
+      and their people and components, tenant-leading indexes keep reads fast, and a mandatory scoping repository
+      guarantees that no query can ever escape its tenant.</p>
+    <div class="status">Proposed — awaiting approval. Nothing implemented yet.</div>
+
+    <div class="tip"><b>The core idea.</b> Isolation is not enforced by discipline — it is enforced by structure.
+      A shared <code>getTenantRepo(tenant)</code> is the <em>only</em> way application code touches the database, and
+      it forces <code>tenantId</code> onto every operation. An un-scoped query is not discouraged; it is unavailable.</div>
+
+    <h2>The tenant slug</h2>
+    <p>The tenant identifier is the tenant's human-readable <b>slug</b> — the same value passed to a glue-main
+      deployment as <code>TENANT_SLUG</code> (for example <code>clouda</code>, <code>acme</code>). We store it on every
+      tenant-owned document as <code>tenantId</code>. Using the slug rather than an opaque <code>ObjectId</code> means
+      the value in the environment, in the URL logs, and in the database all read the same, and a scoped query needs
+      no extra lookup to translate an env var into a key.</p>
+    <div class="note"><b>One value, everywhere.</b> <code>TENANT_SLUG</code> (env) = <code>tenants.slug</code> =
+      the <code>tenantId</code> stamped on <code>webpages</code> and <code>webpage_content</code>. If they ever disagree,
+      the tenant is misconfigured — there is nothing to reconcile.</div>
+
+    <h2>New collections</h2>
+    <p>Three collections describe the multi-tenant world itself. They are the only place tenant metadata lives; the
+      content collections just reference a slug.</p>
+    <div class="code">
+      <div class="label"><span>packages/db · collection shapes</span><span class="lang">ts</span></div>
+<pre><code><span class="c-cm">// tenants — one document per tenant; slug is the tenantId used everywhere else</span>
+<span class="c-kw">interface</span> <span class="c-fn">Tenant</span> {
+  _id: <span class="c-fn">ObjectId</span>;
+  slug: <span class="c-fn">string</span>;              <span class="c-cm">// UNIQUE — e.g. "clouda"; equals TENANT_SLUG</span>
+  name: <span class="c-fn">string</span>;
+  domains: <span class="c-fn">string</span>[];         <span class="c-cm">// all hostnames that map to this tenant</span>
+  primaryDomain: <span class="c-fn">string</span>;
+  status: <span class="c-st">"active"</span> | <span class="c-st">"suspended"</span> | <span class="c-st">"archived"</span>;
+  dbName: <span class="c-fn">string</span>;            <span class="c-cm">// "glue" today; reserved for DB-per-tenant later</span>
+  baseUrl: <span class="c-fn">string</span>;
+  theme: <span class="c-fn">Record</span>&lt;<span class="c-fn">string</span>, <span class="c-fn">unknown</span>&gt;;      <span class="c-cm">// tokens / theme-file ref (see Theming)</span>
+  analytics: { gtmId?: <span class="c-fn">string</span> };
+  integrations: <span class="c-fn">Record</span>&lt;<span class="c-fn">string</span>, <span class="c-fn">unknown</span>&gt;;  <span class="c-cm">// Zoho, etc.</span>
+}
+
+<span class="c-cm">// tenant_users — which user belongs to which tenant, with which roles</span>
+<span class="c-kw">interface</span> <span class="c-fn">TenantUser</span> {
+  _id: <span class="c-fn">ObjectId</span>;
+  userId: <span class="c-fn">string</span>;            <span class="c-cm">// Cognito subject</span>
+  tenantId: <span class="c-fn">string</span>;          <span class="c-cm">// tenant slug</span>
+  roles: (<span class="c-st">"admin"</span> | <span class="c-st">"editor"</span> | <span class="c-st">"viewer"</span>)[];
+  status: <span class="c-st">"active"</span> | <span class="c-st">"invited"</span> | <span class="c-st">"disabled"</span>;
+  <span class="c-cm">// UNIQUE { userId, tenantId }</span>
+}
+
+<span class="c-cm">// component_registry — which components exist and who may use them</span>
+<span class="c-kw">interface</span> <span class="c-fn">ComponentRegistryEntry</span> {
+  _id: <span class="c-fn">ObjectId</span>;
+  name: <span class="c-fn">string</span>;              <span class="c-cm">// UNIQUE</span>
+  category: <span class="c-fn">string</span>;
+  visibility: <span class="c-st">"global"</span> | <span class="c-st">"tenant-list"</span> | <span class="c-st">"tenant-specific"</span>;
+  tenantIds: <span class="c-fn">string</span>[];       <span class="c-cm">// used when visibility is tenant-list / tenant-specific</span>
+  status: <span class="c-st">"active"</span> | <span class="c-st">"deprecated"</span>;
+}</code></pre>
+    </div>
+
+    <div class="diagram">
+      <svg viewBox="0 0 1080 430" role="img" aria-label="Entity diagram. tenants relates one-to-many to tenant_users and one-to-many to webpages. webpages relates one-to-one to webpage_content. component_registry references tenants by tenantId.">
+        <defs>
+          <marker id="arw" markerWidth="11" markerHeight="11" refX="7.5" refY="3.4" orient="auto"><path d="M0,0 L8.4,3.4 L0,6.8 Z" fill="#f96f2d"></path></marker>
+          <style>
+            .bx{fill:#fff;stroke:#dfe4ec;stroke-width:1.5}
+            .cap-b{fill:#f96f2d}
+            .hd{font:700 15px var(--sans,sans-serif);fill:#fff}
+            .sub{font:12px var(--sans,sans-serif);fill:#5c6673}
+            .lbl{font:600 12px var(--sans,sans-serif);fill:#8a94a2}
+            .flow{stroke:#f96f2d;stroke-width:2.2;fill:none}
+          </style>
+        </defs>
+
+        <!-- tenants -->
+        <rect class="bx" x="430" y="30" width="220" height="86" rx="12"></rect>
+        <path class="cap-b" d="M430,44 a14,14 0 0 1 14,-14 h192 a14,14 0 0 1 14,14 v18 h-220 z"></path>
+        <text class="hd" x="540" y="52" text-anchor="middle">tenants</text>
+        <text class="sub" x="540" y="82" text-anchor="middle">slug · name · domains</text>
+        <text class="sub" x="540" y="102" text-anchor="middle">status · dbName · theme</text>
+
+        <!-- tenant_users -->
+        <rect class="bx" x="90" y="200" width="220" height="82" rx="12"></rect>
+        <path class="cap-b" d="M90,214 a14,14 0 0 1 14,-14 h192 a14,14 0 0 1 14,14 v18 h-220 z"></path>
+        <text class="hd" x="200" y="222" text-anchor="middle">tenant_users</text>
+        <text class="sub" x="200" y="252" text-anchor="middle">userId · tenantId</text>
+        <text class="sub" x="200" y="272" text-anchor="middle">roles[] · status</text>
+
+        <!-- webpages -->
+        <rect class="bx" x="430" y="200" width="220" height="82" rx="12"></rect>
+        <path class="cap-b" d="M430,214 a14,14 0 0 1 14,-14 h192 a14,14 0 0 1 14,14 v18 h-220 z"></path>
+        <text class="hd" x="540" y="222" text-anchor="middle">webpages</text>
+        <text class="sub" x="540" y="252" text-anchor="middle">tenantId · name</text>
+        <text class="sub" x="540" y="272" text-anchor="middle">type · status</text>
+
+        <!-- component_registry -->
+        <rect class="bx" x="770" y="200" width="220" height="82" rx="12"></rect>
+        <path class="cap-b" d="M770,214 a14,14 0 0 1 14,-14 h192 a14,14 0 0 1 14,14 v18 h-220 z"></path>
+        <text class="hd" x="880" y="222" text-anchor="middle">component_registry</text>
+        <text class="sub" x="880" y="252" text-anchor="middle">name · visibility</text>
+        <text class="sub" x="880" y="272" text-anchor="middle">tenantIds[]</text>
+
+        <!-- webpage_content -->
+        <rect class="bx" x="430" y="342" width="220" height="72" rx="12"></rect>
+        <path class="cap-b" d="M430,356 a14,14 0 0 1 14,-14 h192 a14,14 0 0 1 14,14 v18 h-220 z"></path>
+        <text class="hd" x="540" y="364" text-anchor="middle">webpage_content</text>
+        <text class="sub" x="540" y="396" text-anchor="middle">tenantId · parentId · blocks[]</text>
+
+        <!-- relationships -->
+        <path class="flow" d="M440,96 C330,132 250,158 210,198" marker-end="url(#arw)"></path>
+        <text class="lbl" x="288" y="150" text-anchor="middle">1 .. * users</text>
+        <path class="flow" d="M540,116 L540,198" marker-end="url(#arw)"></path>
+        <text class="lbl" x="596" y="160" text-anchor="middle">1 .. * pages</text>
+        <path class="flow" d="M640,96 C752,132 832,158 872,198" marker-end="url(#arw)"></path>
+        <text class="lbl" x="792" y="150" text-anchor="middle">tenantIds[]</text>
+        <path class="flow" d="M540,282 L540,340" marker-end="url(#arw)"></path>
+        <text class="lbl" x="596" y="316" text-anchor="middle">1 .. 1 content</text>
+      </svg>
+      <div class="cap">tenants owns users and pages; each page has exactly one content document; the registry references tenants by slug.</div>
+    </div>
+
+    <h2>tenantId on existing collections</h2>
+    <p>The two content collections each gain a <code>tenantId</code> holding the tenant slug. Nothing is removed —
+      it is a purely additive field.</p>
+    <div class="grid c2">
+      <div class="card"><h4>webpages</h4><p style="margin:2px 0 0">Existing shape <code>{_id, name, type, status, timestamps}</code> gains <code>tenantId</code>. The page list in Composer becomes a scoped query.</p></div>
+      <div class="card"><h4>webpage_content</h4><p style="margin:2px 0 0">Existing shape <code>{_id, parentId, name, status, blocks[], settings[], pagePath, timestamps}</code> gains <code>tenantId</code>, <b>denormalised</b> from its parent.</p></div>
+    </div>
+    <p>The denormalisation matters. <code>getWebpageContentBySlug</code> is the hot read path on every public page
+      request in glue-main. Carrying <code>tenantId</code> directly on <code>webpage_content</code> means that read
+      filters <code>{tenantId, pagePath, status:"live"}</code> against a single collection — it never has to join back
+      to <code>webpages</code> to discover which tenant the content belongs to.</p>
+
+    <h2>Indexes</h2>
+    <p>Every scoped query starts with <code>tenantId</code>, so every compound index must lead with it. That keeps
+      each tenant's slice of a collection contiguous in the index and makes cross-tenant scans structurally unlikely.
+      A partial-unique index guarantees one live page per path <em>per tenant</em>.</p>
+    <div class="code">
+      <div class="label"><span>packages/db/scripts/indexes.js</span><span class="lang">js</span></div>
+<pre><code><span class="c-cm">// webpage_content — hot read path leads with tenantId</span>
+db.webpage_content.createIndex({ tenantId: <span class="c-nm">1</span>, pagePath: <span class="c-nm">1</span>, status: <span class="c-nm">1</span> });
+db.webpage_content.createIndex({ tenantId: <span class="c-nm">1</span>, parentId: <span class="c-nm">1</span> });
+
+<span class="c-cm">// webpages — listing + lookups</span>
+db.webpages.createIndex({ tenantId: <span class="c-nm">1</span>, type: <span class="c-nm">1</span>, status: <span class="c-nm">1</span> });
+db.webpages.createIndex({ tenantId: <span class="c-nm">1</span>, status: <span class="c-nm">1</span> });
+
+<span class="c-cm">// one LIVE page per path, per tenant (partial-unique)</span>
+db.webpage_content.createIndex(
+  { tenantId: <span class="c-nm">1</span>, pagePath: <span class="c-nm">1</span> },
+  { unique: <span class="c-kw">true</span>, partialFilterExpression: { status: <span class="c-st">"live"</span> } }
+);
+
+<span class="c-cm">// registry + membership uniqueness</span>
+db.tenants.createIndex({ slug: <span class="c-nm">1</span> }, { unique: <span class="c-kw">true</span> });
+db.tenant_users.createIndex({ userId: <span class="c-nm">1</span>, tenantId: <span class="c-nm">1</span> }, { unique: <span class="c-kw">true</span> });
+db.component_registry.createIndex({ name: <span class="c-nm">1</span> }, { unique: <span class="c-kw">true</span> });</code></pre>
+    </div>
+
+    <h2>The scoping repository</h2>
+    <p>A single shared factory, <code>getTenantRepo(tenant)</code> (it lives in <code>packages/db</code> — see the
+      <a href="shared-packages.html">Shared Packages</a> page), is the only way application code obtains a collection.
+      It returns tenant-bound collection wrappers, never the raw driver collection. Each wrapper spreads
+      <code>{ tenantId }</code> <b>last</b> onto every read/update/delete filter (so a caller cannot override it) and
+      <b>forces</b> <code>tenantId</code> onto every insert/replace. Because the raw collection is never handed out, an
+      un-scoped query is not merely discouraged — it is impossible to express.</p>
+    <div class="code">
+      <div class="label"><span>packages/db/src/repository.ts</span><span class="lang">ts</span></div>
+<pre><code><span class="c-kw">function</span> <span class="c-fn">scoped</span>&lt;T&gt;(col: <span class="c-fn">Collection</span>&lt;T&gt;, tenantId: <span class="c-fn">string</span>) {
+  <span class="c-cm">// tenantId is spread LAST so a caller-supplied filter can never override it</span>
+  <span class="c-kw">const</span> <span class="c-fn">scope</span> = (f: <span class="c-fn">Filter</span>&lt;T&gt; = {}) =&gt; ({ ...f, tenantId });
+
+  <span class="c-kw">return</span> {
+    <span class="c-fn">find</span>: (f?: <span class="c-fn">Filter</span>&lt;T&gt;) =&gt; col.<span class="c-fn">find</span>(<span class="c-fn">scope</span>(f)),
+    <span class="c-fn">findOne</span>: (f?: <span class="c-fn">Filter</span>&lt;T&gt;) =&gt; col.<span class="c-fn">findOne</span>(<span class="c-fn">scope</span>(f)),
+    <span class="c-fn">updateOne</span>: (f: <span class="c-fn">Filter</span>&lt;T&gt;, u: <span class="c-fn">UpdateFilter</span>&lt;T&gt;) =&gt;
+      col.<span class="c-fn">updateOne</span>(<span class="c-fn">scope</span>(f), u),
+    <span class="c-fn">deleteOne</span>: (f: <span class="c-fn">Filter</span>&lt;T&gt;) =&gt; col.<span class="c-fn">deleteOne</span>(<span class="c-fn">scope</span>(f)),
+
+    <span class="c-cm">// writes FORCE tenantId — caller cannot set a different one</span>
+    <span class="c-fn">insertOne</span>: (doc: <span class="c-fn">OptionalId</span>&lt;T&gt;) =&gt;
+      col.<span class="c-fn">insertOne</span>({ ...doc, tenantId }),
+    <span class="c-fn">replaceOne</span>: (f: <span class="c-fn">Filter</span>&lt;T&gt;, doc: T) =&gt;
+      col.<span class="c-fn">replaceOne</span>(<span class="c-fn">scope</span>(f), { ...doc, tenantId }),
+  };
+}
+
+<span class="c-kw">export</span> <span class="c-kw">async</span> <span class="c-kw">function</span> <span class="c-fn">getTenantRepo</span>(tenant: <span class="c-fn">string</span>) {
+  <span class="c-kw">const</span> db = <span class="c-kw">await</span> <span class="c-fn">startMongo</span>();      <span class="c-cm">// only packages/db may call this</span>
+  <span class="c-kw">return</span> {
+    webpages: <span class="c-fn">scoped</span>(db.<span class="c-fn">collection</span>(<span class="c-st">"webpages"</span>), tenant),
+    content: <span class="c-fn">scoped</span>(db.<span class="c-fn">collection</span>(<span class="c-st">"webpage_content"</span>), tenant),
+  };
+  <span class="c-cm">// raw collections are never returned</span>
+}</code></pre>
+    </div>
+    <div class="warn"><b>CI gate.</b> An ESLint rule (run in CI) forbids <code>.collection("webpages")</code> /
+      <code>.collection("webpage_content")</code> and any import of <code>startMongo</code> <em>outside</em>
+      <code>packages/db</code>. The repository is the single door; the lint rule keeps it the only door.</div>
+
+    <h2>Migration &amp; backfill</h2>
+    <p>The migration is <b>additive, idempotent, and reversible</b>. Application code ships first, defaulting missing
+      <code>tenantId</code> to <code>"clouda"</code>, so nothing breaks before the data is touched. Indexes are built
+      <em>before</em> the backfill so the write and every subsequent read land on a tenant-leading index. The backfill
+      itself only sets the field where it is absent, so it can be re-run safely, and it is reversible by simply
+      dropping the field.</p>
+    <ol class="steps">
+      <li><b>Create <code>tenants</code> + default tenant</b><span>Insert the <code>tenants</code> collection and a single default document with <code>slug: "clouda"</code>.</span></li>
+      <li><b>Build tenant-leading indexes</b><span>Run the index script so the backfill writes and later reads use the new compound indexes.</span></li>
+      <li><b>Backfill existing documents</b><span><code>updateMany</code> only where <code>tenantId</code> is absent — idempotent by construction.</span></li>
+      <li><b>Verify</b><span>Assert zero remaining un-tagged documents before considering the tenant live.</span></li>
+    </ol>
+    <div class="code">
+      <div class="label"><span>packages/db/scripts/backfill.js</span><span class="lang">js</span></div>
+<pre><code><span class="c-cm">// 1 — default tenant (idempotent via upsert on unique slug)</span>
+db.tenants.updateOne(
+  { slug: <span class="c-st">"clouda"</span> },
+  { $setOnInsert: { slug: <span class="c-st">"clouda"</span>, name: <span class="c-st">"Clouda"</span>, status: <span class="c-st">"active"</span>,
+                    dbName: <span class="c-st">"glue"</span>, domains: [<span class="c-st">"www.clouda.io"</span>] } },
+  { upsert: <span class="c-kw">true</span> }
+);
+
+<span class="c-cm">// 2 — indexes already built (see indexes.js) BEFORE this step</span>
+
+<span class="c-cm">// 3 — backfill only where the field is absent → safe to re-run</span>
+db.webpages.updateMany(
+  { tenantId: { $exists: <span class="c-kw">false</span> } },
+  { $set: { tenantId: <span class="c-st">"clouda"</span> } }
+);
+db.webpage_content.updateMany(
+  { tenantId: { $exists: <span class="c-kw">false</span> } },
+  { $set: { tenantId: <span class="c-st">"clouda"</span> } }
+);
+
+<span class="c-cm">// 4 — verify: both must be 0</span>
+<span class="c-fn">print</span>(db.webpages.countDocuments({ tenantId: { $exists: <span class="c-kw">false</span> } }));
+<span class="c-fn">print</span>(db.webpage_content.countDocuments({ tenantId: { $exists: <span class="c-kw">false</span> } }));
+
+<span class="c-cm">// reversible: db.&lt;col&gt;.updateMany({}, { $unset: { tenantId: "" } })</span></code></pre>
+    </div>
+    <div class="ok"><b>Order guarantees safety.</b> Ship code defaulting to <code>clouda</code> → build indexes →
+      backfill → verify <code>=== 0</code>. At no point does <code>www.clouda.io</code> behave differently, and each
+      step can be re-run or rolled back independently.</div>
+
+    <h2>Files touched</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Path</th><th>Change</th></tr></thead>
+        <tbody>
+          <tr><td><code>packages/db/src/mongo.ts</code></td><td>Owns <code>startMongo()</code>; only file allowed to open the connection.</td></tr>
+          <tr><td><code>packages/db/src/tenants.ts</code></td><td>Tenant, TenantUser, ComponentRegistry types + tenant lookups by slug/domain.</td></tr>
+          <tr><td><code>packages/db/src/repository.ts</code></td><td><code>getTenantRepo()</code> + the <code>scoped()</code> wrapper — the single door to data.</td></tr>
+          <tr><td><code>packages/db/scripts/indexes.js</code></td><td>Creates all tenant-leading and unique indexes.</td></tr>
+          <tr><td><code>packages/db/scripts/backfill.js</code></td><td>Default tenant + idempotent, reversible backfill and verification.</td></tr>
+          <tr><td><code>glue-main/src/lib/webpageContent.ts</code></td><td>Read path moves onto <code>getTenantRepo(TENANT_SLUG)</code>.</td></tr>
+          <tr><td><code>glue-composer</code> data-access</td><td>Page CRUD moves onto the scoped repo for the selected tenant.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pagenav"><a class="prev" href="content-management.html"><div class="dir">&larr; Prev</div><div class="ttl">1 &middot; Content Management</div></a><a class="next" href="deployment.html"><div class="dir">Next &rarr;</div><div class="ttl">3 &middot; Deployment</div></a></div>
+    <div class="footer">Clouda Glue Solutions &middot; Multi-Tenancy Documentation &middot; Proposed &mdash; awaiting approval.</div>
+  </main>
+</div>
+</body>
+</html>

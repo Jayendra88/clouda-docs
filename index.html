@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Overview · Multi-Tenancy Documentation · Clouda Glue</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="sb">
+    <div class="sb-brand"><span class="logo"></span>Clouda <span>Glue</span></div>
+    <div class="sb-sub">Multi-Tenancy Documentation</div>
+    <div class="sb-group">Getting started</div>
+    <a href="index.html" class="active">Overview</a>
+    <div class="sb-group">Architecture</div>
+    <a href="content-management.html"><span class="num">1</span> Content Management</a>
+    <a href="data-model.html"><span class="num">2</span> Data Model &amp; Isolation</a>
+    <a href="deployment.html"><span class="num">3</span> Deployment</a>
+    <a href="theming.html"><span class="num">4</span> Theming</a>
+    <a href="shared-packages.html"><span class="num">5</span> Shared Packages</a>
+    <a href="component-config.html"><span class="num">6</span> Component Configuration</a>
+    <div class="sb-group">Delivery</div>
+    <a href="roadmap.html"><span class="num">7</span> Roadmap &amp; Risks</a>
+  </nav>
+
+  <main class="content">
+    <div class="crumbs"><b>Overview</b></div>
+    <span class="eyebrow">Proposal · Technical documentation</span>
+    <h1>Multi-tenancy for the Clouda Glue platform</h1>
+    <p class="lead">How to serve many tenant websites from one codebase: a tenant slug in the database, one shared
+      Glue Composer, per-tenant deployments of glue-main, per-tenant theming, shared workspace packages, and
+      component-level configuration. This site documents the whole approach — architecture, code, and rollout.</p>
+    <div class="status">Proposed — awaiting approval. Nothing implemented yet.</div>
+
+    <div class="tip"><b>How to read this.</b> Start here for the big picture, then follow the sidebar top-to-bottom:
+      each page covers one area with diagrams, code, and the concrete files it touches. The
+      <a href="roadmap.html">Roadmap &amp; Risks</a> page ties it into a phased, MVP-first plan.</div>
+
+    <h2>The system at a glance</h2>
+    <p>One monorepo builds everything. <b>glue-main</b> is deployed once per tenant (its own domain + a
+      <code>TENANT_SLUG</code>), while a single <b>glue-composer</b> manages content for all tenants. Both read from
+      one MongoDB where every document carries a tenant slug, so tenants stay isolated.</p>
+
+    <div class="diagram">
+      <svg viewBox="0 0 1120 560" role="img" aria-label="One monorepo builds glue-composer (single shared Amplify app) and glue-main (one Amplify app per tenant, each with a TENANT_SLUG and its own domain). Both read/write one MongoDB where every document carries a tenant slug.">
+        <defs>
+          <marker id="arw" markerWidth="11" markerHeight="11" refX="7.5" refY="3.4" orient="auto"><path d="M0,0 L8.4,3.4 L0,6.8 Z" fill="#f96f2d"></path></marker>
+          <style>
+            .bx{fill:#fff;stroke:#dfe4ec;stroke-width:1.5}
+            .band{fill:#f7f9fc;stroke:#e7ebf1;stroke-width:1.5}
+            .hd{font:700 15px var(--sans,sans-serif);fill:#171a21}
+            .hdl{font:700 14px var(--sans,sans-serif);fill:#171a21}
+            .hdw{font:700 15px var(--sans,sans-serif);fill:#fff}
+            .sub{font:12.5px var(--sans,sans-serif);fill:#5c6673}
+            .subl{font:12px var(--sans,sans-serif);fill:#5c6673}
+            .lbl{font:600 12px var(--sans,sans-serif);fill:#8a94a2}
+            .flow{stroke:#f96f2d;stroke-width:2.4;fill:none}
+          </style>
+        </defs>
+
+        <!-- Monorepo (source) -->
+        <rect class="bx" x="390" y="28" width="340" height="86" rx="14"></rect>
+        <text class="hd" x="560" y="56" text-anchor="middle">Monorepo — one repository</text>
+        <text class="sub" x="560" y="80" text-anchor="middle">glue-main · glue-composer</text>
+        <text class="sub" x="560" y="100" text-anchor="middle">packages/db · packages/components</text>
+
+        <!-- Actors -->
+        <rect class="band" x="24" y="212" width="120" height="88" rx="12"></rect>
+        <text class="hdl" x="84" y="250" text-anchor="middle">Super User</text>
+        <text class="sub" x="84" y="272" text-anchor="middle">&amp; editors</text>
+
+        <!-- Composer -->
+        <rect x="178" y="196" width="266" height="124" rx="14" fill="#fff7f2" stroke="#ffcdb1" stroke-width="1.6"></rect>
+        <path d="M192,196 h238 a14,14 0 0 1 14,14 v22 h-266 v-22 a14,14 0 0 1 14,-14 z" fill="#f96f2d"></path>
+        <text class="hdw" x="311" y="224" text-anchor="middle">glue-composer</text>
+        <text class="sub" x="311" y="262" text-anchor="middle">single shared Amplify app</text>
+        <text class="sub" x="311" y="284" text-anchor="middle">tenant switcher · scoped CRUD</text>
+        <text class="sub" x="311" y="306" text-anchor="middle">Super User: manage tenants</text>
+
+        <!-- glue-main sites -->
+        <rect class="bx" x="760" y="150" width="340" height="72" rx="12"></rect>
+        <rect x="760" y="150" width="8" height="72" rx="4" fill="#f96f2d"></rect>
+        <text class="hdl" x="784" y="180">glue-main — Tenant A</text>
+        <text class="subl" x="784" y="202">TENANT_SLUG=acme · acme.com</text>
+
+        <rect class="bx" x="760" y="232" width="340" height="72" rx="12"></rect>
+        <rect x="760" y="232" width="8" height="72" rx="4" fill="#0ea5a5"></rect>
+        <text class="hdl" x="784" y="262">glue-main — Tenant B</text>
+        <text class="subl" x="784" y="284">TENANT_SLUG=brandb · brandb.com</text>
+
+        <rect class="bx" x="760" y="314" width="340" height="72" rx="12"></rect>
+        <rect x="760" y="314" width="8" height="72" rx="4" fill="#7c5cff"></rect>
+        <text class="hdl" x="784" y="344">glue-main — Tenant C</text>
+        <text class="subl" x="784" y="366">TENANT_SLUG=brandc · brandc.com</text>
+
+        <!-- MongoDB -->
+        <rect class="band" x="300" y="440" width="560" height="78" rx="14"></rect>
+        <text class="hd" x="580" y="472" text-anchor="middle">MongoDB — one database</text>
+        <text class="sub" x="580" y="496" text-anchor="middle">every document carries a tenantId (tenant slug)</text>
+
+        <!-- flows -->
+        <path class="flow" d="M500,114 C470,150 400,172 356,198" marker-end="url(#arw)"></path>
+        <text class="lbl" x="425" y="150" text-anchor="middle">deploy</text>
+        <path class="flow" d="M650,114 C702,138 730,158 756,180" marker-end="url(#arw)"></path>
+        <text class="lbl" x="700" y="138" text-anchor="middle">1 build / tenant</text>
+        <path class="flow" d="M144,256 L174,256" marker-end="url(#arw)"></path>
+        <path class="flow" d="M300,320 C338,382 398,412 430,440" marker-end="url(#arw)"></path>
+        <text class="lbl" x="330" y="398" text-anchor="middle">read / write</text>
+        <path class="flow" d="M772,440 C832,420 874,404 896,388" marker-end="url(#arw)"></path>
+        <text class="lbl" x="812" y="424" text-anchor="middle">read · scoped to slug</text>
+      </svg>
+      <div class="legend"><span><i></i> build / deploy &amp; data flow</span><span><b style="background:#f96f2d"></b> Tenant A</span><span><b style="background:#0ea5a5"></b> Tenant B</span><span><b style="background:#7c5cff"></b> Tenant C</span></div>
+      <div class="cap">One repo → one shared composer + N per-tenant glue-main deployments → one tenant-tagged database.</div>
+    </div>
+
+    <h2>Four decisions that shape everything</h2>
+    <div class="grid c2">
+      <div class="card"><h4>Data isolation</h4><p style="margin:2px 0 0"><b>Shared DB + tenant slug.</b> One database; every document tagged with a <code>tenantId</code>, enforced by a mandatory scoping layer. A <code>dbName</code> field per tenant is the escape hatch to a dedicated DB later.</p></div>
+      <div class="card"><h4>Deployment</h4><p style="margin:2px 0 0"><b>Deploy glue-main per tenant.</b> One Amplify app per tenant with a <code>TENANT_SLUG</code> env var and its own domain; a single shared Amplify app for glue-composer.</p></div>
+      <div class="card"><h4>Theming</h4><p style="margin:2px 0 0"><b>CSS variables + per-tenant theme files.</b> Refactor components off hardcoded values onto tokens; load the tenant's theme file based on <code>TENANT_SLUG</code>.</p></div>
+      <div class="card"><h4>Rollout</h4><p style="margin:2px 0 0"><b>MVP first.</b> Build the foundation and take one real second tenant fully live before the heavier admin/registry tooling.</p></div>
+    </div>
+
+    <h2>From single-tenant to multi-tenant</h2>
+    <p>Today the platform is strictly single-tenant: one MongoDB (<code>webpages</code> + <code>webpage_content</code>,
+      no tenant field), one hardcoded domain, one shared component library with hardcoded brand colours, and one
+      global role model. The proposal makes each of these tenant-aware while keeping <code>www.clouda.io</code>
+      behaving exactly as it does today throughout the rollout.</p>
+
+    <h2>What's inside</h2>
+    <div class="grid c2">
+      <a class="feat" href="content-management.html"><div class="ic">🗂️</div><h3>1 · Content Management</h3><p>One Glue Composer for all tenants, tenant selection after login, scoped CRUD, and the Super User role.</p><span class="more">Read →</span></a>
+      <a class="feat" href="data-model.html"><div class="ic">🧱</div><h3>2 · Data Model &amp; Isolation</h3><p>The tenant slug in the database, the collections, indexes, the scoping repository, and the migration.</p><span class="more">Read →</span></a>
+      <a class="feat" href="deployment.html"><div class="ic">🚀</div><h3>3 · Deployment</h3><p>One repo, per-tenant glue-main Amplify apps via <code>TENANT_SLUG</code>, a single composer, and tenant resolution.</p><span class="more">Read →</span></a>
+      <a class="feat" href="theming.html"><div class="ic">🎨</div><h3>4 · Theming</h3><p>CSS variables, per-tenant theme files, and how header colour/shape/hover/scroll differ with shared components.</p><span class="more">Read →</span></a>
+      <a class="feat" href="shared-packages.html"><div class="ic">📦</div><h3>5 · Shared Packages</h3><p><code>packages/db</code> for the data layer and <code>packages/components</code> for shared UI, in one workspace.</p><span class="more">Read →</span></a>
+      <a class="feat" href="component-config.html"><div class="ic">⚙️</div><h3>6 · Component Configuration</h3><p>Replace <code>sections.json</code> with <code>*.section.json</code> files combined at build, with a tenant slug field.</p><span class="more">Read →</span></a>
+    </div>
+    <div class="grid c2">
+      <a class="feat" href="roadmap.html"><div class="ic">🗺️</div><h3>7 · Roadmap &amp; Risks</h3><p>The phased, MVP-first plan, the risk register with mitigations, and how to verify each step end-to-end.</p><span class="more">Read →</span></a>
+    </div>
+
+    <div class="pagenav">
+      <span></span>
+      <a class="next" href="content-management.html"><div class="dir">Next →</div><div class="ttl">1 · Content Management</div></a>
+    </div>
+    <div class="footer">Clouda Glue Solutions · Multi-Tenancy Documentation · Proposed — awaiting approval.</div>
+  </main>
+</div>
+</body>
+</html>

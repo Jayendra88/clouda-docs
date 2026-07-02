@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Content Management · Multi-Tenancy Documentation · Clouda Glue</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="sb">
+    <div class="sb-brand"><span class="logo"></span>Clouda <span>Glue</span></div>
+    <div class="sb-sub">Multi-Tenancy Documentation</div>
+    <div class="sb-group">Getting started</div>
+    <a href="index.html">Overview</a>
+    <div class="sb-group">Architecture</div>
+    <a href="content-management.html" class="active"><span class="num">1</span> Content Management</a>
+    <a href="data-model.html"><span class="num">2</span> Data Model &amp; Isolation</a>
+    <a href="deployment.html"><span class="num">3</span> Deployment</a>
+    <a href="theming.html"><span class="num">4</span> Theming</a>
+    <a href="shared-packages.html"><span class="num">5</span> Shared Packages</a>
+    <a href="component-config.html"><span class="num">6</span> Component Configuration</a>
+    <div class="sb-group">Delivery</div>
+    <a href="roadmap.html"><span class="num">7</span> Roadmap &amp; Risks</a>
+  </nav>
+
+  <main class="content">
+    <div class="crumbs"><a href="index.html">Overview</a> &rsaquo; <b>Content Management</b></div>
+    <span class="eyebrow">Architecture · Content Management</span>
+    <h1>Content management for many tenants</h1>
+    <p class="lead">One Glue Composer serves every tenant. After login, users pick a tenant; from then on they can only
+      create, update, and delete content for the tenant they selected. A single Super User manages tenants themselves —
+      creating them, assigning members, and viewing tenant-level stats.</p>
+    <div class="status">Proposed — awaiting approval. Nothing implemented yet.</div>
+
+    <div class="tip"><b>The core rule.</b> The active tenant is <b>never trusted from the request body</b>. It comes from a
+      validated <code>httpOnly</code> cookie via one server helper, <code>getTenantContext()</code>, which is the single
+      source of the tenant id for every read and write.</div>
+
+    <h2><span class="n">1</span>One composer, tenant selection after login</h2>
+    <p>Authentication stays exactly as it is today — NextAuth v4 backed by AWS Cognito. The change happens
+      <em>after</em> a session exists. We look up which tenants the user belongs to and route accordingly:</p>
+    <ul>
+      <li>Access to <b>more than one tenant</b> &rarr; redirect to a <code>/select-tenant</code> chooser.</li>
+      <li>Access to <b>exactly one tenant</b> &rarr; auto-select it and continue straight into the workspace.</li>
+      <li>Access to <b>zero tenants</b> &rarr; a friendly empty state (a Super User must assign membership first).</li>
+    </ul>
+    <p>The chosen tenant is written to an <code>httpOnly</code> cookie named <code>active_tenant</code>. On every request
+      that cookie is <b>validated against the user's tenant memberships</b> — a raw cookie value is never trusted on its
+      own. Resolution is centralised in a new helper so no route ever re-implements it.</p>
+
+    <div class="diagram">
+      <svg viewBox="0 0 1080 250" role="img" aria-label="Flow: Login leads to a check for more than one tenant. If yes, the user is sent to slash select-tenant to choose. If exactly one, it is auto-selected. Either way the result is a composer workspace scoped to the chosen tenant.">
+        <defs>
+          <marker id="arw" markerWidth="11" markerHeight="11" refX="7.5" refY="3.4" orient="auto"><path d="M0,0 L8.4,3.4 L0,6.8 Z" fill="#f96f2d"></path></marker>
+          <style>
+            .bx{fill:#fff;stroke:#dfe4ec;stroke-width:1.5}
+            .bxo{fill:#fff7f2;stroke:#ffcdb1;stroke-width:1.6}
+            .hd{font:700 15px var(--sans,sans-serif);fill:#171a21}
+            .sub{font:12.5px var(--sans,sans-serif);fill:#5c6673}
+            .lbl{font:600 12px var(--sans,sans-serif);fill:#8a94a2}
+            .flow{stroke:#f96f2d;stroke-width:2.4;fill:none}
+          </style>
+        </defs>
+
+        <rect class="bx" x="24" y="96" width="150" height="66" rx="12"></rect>
+        <text class="hd" x="99" y="126" text-anchor="middle">Login</text>
+        <text class="sub" x="99" y="146" text-anchor="middle">Cognito · NextAuth</text>
+
+        <rect class="bxo" x="252" y="88" width="200" height="82" rx="12"></rect>
+        <text class="hd" x="352" y="122" text-anchor="middle">Has &gt; 1 tenant?</text>
+        <text class="sub" x="352" y="146" text-anchor="middle">check memberships</text>
+
+        <rect class="bx" x="536" y="24" width="212" height="66" rx="12"></rect>
+        <text class="hd" x="642" y="52" text-anchor="middle">/select-tenant</text>
+        <text class="sub" x="642" y="74" text-anchor="middle">user chooses a tenant</text>
+
+        <rect class="bx" x="536" y="170" width="212" height="66" rx="12"></rect>
+        <text class="hd" x="642" y="198" text-anchor="middle">Auto-select</text>
+        <text class="sub" x="642" y="220" text-anchor="middle">the single tenant</text>
+
+        <rect class="bxo" x="828" y="88" width="228" height="82" rx="12"></rect>
+        <text class="hd" x="942" y="122" text-anchor="middle">Composer workspace</text>
+        <text class="sub" x="942" y="146" text-anchor="middle">scoped to active_tenant</text>
+
+        <path class="flow" d="M174,129 L248,129" marker-end="url(#arw)"></path>
+        <path class="flow" d="M400,88 C420,58 470,57 532,57" marker-end="url(#arw)"></path>
+        <text class="lbl" x="470" y="48" text-anchor="middle">yes</text>
+        <path class="flow" d="M400,170 C420,200 470,203 532,203" marker-end="url(#arw)"></path>
+        <text class="lbl" x="470" y="224" text-anchor="middle">no</text>
+        <path class="flow" d="M748,57 C800,80 812,100 828,118" marker-end="url(#arw)"></path>
+        <path class="flow" d="M748,203 C800,180 812,160 828,140" marker-end="url(#arw)"></path>
+      </svg>
+      <div class="cap">One entry, one validated cookie, one scoped workspace — regardless of how many tenants a user can reach.</div>
+    </div>
+
+    <p>The helper below lives at <code>glue-composer/src/lib/tenantContext.ts</code>. It returns everything a handler
+      needs and is the <b>only</b> place the tenant id is derived:</p>
+
+    <div class="code"><div class="label"><span>glue-composer/src/lib/tenantContext.ts</span><span class="lang">ts</span></div><pre><code><span class="c-kw">import</span> { cookies } <span class="c-kw">from</span> <span class="c-st">"next/headers"</span>;
+<span class="c-kw">import</span> { getSession } <span class="c-kw">from</span> <span class="c-st">"@/app/utils/getSession"</span>;
+<span class="c-kw">import</span> { getUserMemberships } <span class="c-kw">from</span> <span class="c-st">"./tenants"</span>;
+
+<span class="c-kw">export type</span> <span class="c-fn">TenantContext</span> = {
+  tenantId: <span class="c-fn">string</span>;
+  tenantSlug: <span class="c-fn">string</span>;
+  effectiveRoles: <span class="c-fn">Role</span>[];        <span class="c-cm">// the user's roles WITHIN this tenant</span>
+  isGlobalSuperAdmin: <span class="c-fn">boolean</span>;
+};
+
+<span class="c-kw">export async function</span> <span class="c-fn">getTenantContext</span>(): <span class="c-fn">Promise</span>&lt;<span class="c-fn">TenantContext</span>&gt; {
+  <span class="c-kw">const</span> session = <span class="c-kw">await</span> <span class="c-fn">getSession</span>();
+  <span class="c-kw">if</span> (!session) <span class="c-kw">throw new</span> <span class="c-fn">Error</span>(<span class="c-st">"UNAUTHENTICATED"</span>);
+
+  <span class="c-kw">const</span> raw = <span class="c-fn">cookies</span>().<span class="c-fn">get</span>(<span class="c-st">"active_tenant"</span>)?.value;
+  <span class="c-kw">const</span> memberships = <span class="c-kw">await</span> <span class="c-fn">getUserMemberships</span>(session.userId);
+
+  <span class="c-cm">// Never trust the cookie: it must match a real membership.</span>
+  <span class="c-kw">const</span> m = memberships.<span class="c-fn">find</span>((x) =&gt; x.tenantId === raw);
+  <span class="c-kw">if</span> (!m) <span class="c-kw">throw new</span> <span class="c-fn">Error</span>(<span class="c-st">"NO_ACTIVE_TENANT"</span>); <span class="c-cm">// -&gt; /select-tenant</span>
+
+  <span class="c-kw">return</span> {
+    tenantId: m.tenantId,
+    tenantSlug: m.tenantSlug,
+    effectiveRoles: m.roles,
+    isGlobalSuperAdmin: session.isGlobalSuperAdmin === <span class="c-nm">true</span>,
+  };
+}</code></pre></div>
+
+    <h2><span class="n">2</span>Scoped create / update / delete</h2>
+    <p>Every function in <code>glue-composer/src/lib/webpages.ts</code> and <code>webpageContent.ts</code> gains a
+      <b>required <code>tenantId</code> parameter</b> that is folded into every Mongo filter and every insert. This is the
+      wall that stops <b>IDOR</b>: <code>getWebpageById(tenantId, id)</code> returns <code>null</code> for a document that
+      belongs to another tenant, so a guessed <code>_id</code> reveals nothing.</p>
+    <ul>
+      <li>Reads: <code>getAllWebpages(tenantId, …)</code>, <code>getWebpageById(tenantId, id)</code> — the tenant is part of the query.</li>
+      <li>Create: <code>POST /api/webpage</code> &rarr; <code>createEmptyPage(tenantId)</code> stamps the tenant on
+        <b>both</b> the <code>webpages</code> and <code>webpage_content</code> documents.</li>
+      <li>Update / delete: the same <code>tenantId</code> filter is required, so a foreign document simply never matches.</li>
+    </ul>
+    <div class="note"><b>Route handlers never read <code>tenantId</code> from the client body.</b> They derive it from
+      <code>getTenantContext()</code> and pass it down. The body describes <em>what</em> to change; the context decides
+      <em>whose</em> data it is.</div>
+
+    <div class="code"><div class="label"><span>glue-composer/src/lib/webpages.ts</span><span class="lang">ts</span></div><pre><code><span class="c-kw">export async function</span> <span class="c-fn">getAllWebpages</span>(
+  tenantId: <span class="c-fn">string</span>,
+  filter: <span class="c-fn">Partial</span>&lt;<span class="c-fn">WebpageQuery</span>&gt; = {}
+) {
+  <span class="c-kw">const</span> query = { ...filter, tenantId };   <span class="c-cm">// tenant folded into EVERY filter</span>
+  <span class="c-kw">return</span> db.<span class="c-fn">collection</span>(<span class="c-st">"webpages"</span>).<span class="c-fn">find</span>(query).<span class="c-fn">toArray</span>();
+}
+
+<span class="c-kw">export async function</span> <span class="c-fn">getWebpageById</span>(tenantId: <span class="c-fn">string</span>, id: <span class="c-fn">string</span>) {
+  <span class="c-cm">// Foreign tenant -&gt; no match -&gt; null (blocks IDOR)</span>
+  <span class="c-kw">return</span> db.<span class="c-fn">collection</span>(<span class="c-st">"webpages"</span>).<span class="c-fn">findOne</span>({ _id: <span class="c-fn">toId</span>(id), tenantId });
+}
+
+<span class="c-kw">export async function</span> <span class="c-fn">createEmptyPage</span>(tenantId: <span class="c-fn">string</span>, name: <span class="c-fn">string</span>) {
+  <span class="c-kw">const</span> page = <span class="c-kw">await</span> db.<span class="c-fn">collection</span>(<span class="c-st">"webpages"</span>).<span class="c-fn">insertOne</span>({
+    name, type: <span class="c-st">"page"</span>, status: <span class="c-st">"draft"</span>, tenantId,   <span class="c-cm">// stamped on insert</span>
+    createdAt: <span class="c-kw">new</span> <span class="c-fn">Date</span>(), updatedAt: <span class="c-kw">new</span> <span class="c-fn">Date</span>(),
+  });
+  <span class="c-kw">await</span> db.<span class="c-fn">collection</span>(<span class="c-st">"webpage_content"</span>).<span class="c-fn">insertOne</span>({
+    parentId: page.insertedId, name, status: <span class="c-st">"draft"</span>,
+    tenantId, blocks: [], settings: [],          <span class="c-cm">// tenant on content doc too</span>
+  });
+  <span class="c-kw">return</span> page.insertedId;
+}</code></pre></div>
+
+    <h2><span class="n">3</span>Roles and the Super User</h2>
+    <p>The permission vocabulary in <code>glue-composer/src/lib/permissions.ts</code> is unchanged, and permissions
+      stay a <b>pure function</b> of roles &rarr; capability. Tenancy is applied purely by <b>which roles are passed
+      in</b>: a user's roles now come per-tenant from a Mongo <code>tenant_users</code> mapping. The <b>per-tenant</b>
+      roles are <code>admin</code>, <code>editor</code>, and <code>viewer</code>; <code>super-admin</code> is <b>not</b>
+      a per-tenant role — the cross-tenant Super User is the global <code>isGlobalSuperAdmin</code> flag (matching the
+      <a href="data-model.html">Data Model</a> page's <code>tenant_users.roles</code>).</p>
+
+    <div class="tablewrap"><table>
+      <thead><tr><th>Collection</th><th>Shape</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td class="pick">tenant_users</td><td><code>{ userId, tenantId, roles[] }</code></td><td>Which roles a user holds inside a given tenant.</td></tr>
+        <tr><td class="pick">Global flag</td><td><code>isGlobalSuperAdmin</code> on the session</td><td>Cross-tenant Super User; independent of any single tenant's roles.</td></tr>
+      </tbody>
+    </table></div>
+
+    <p>The existing guards — <code>apiGuard.ts</code> <code>requirePermission()</code>,
+      <code>serverPermission.ts</code> <code>serverCan()</code>, and <code>hooks/usePermission.ts</code> — become
+      <b>tenant-aware</b>. Critically, <code>requirePermission(perm)</code> now <b>returns the resolved
+      <code>tenantId</code></b> so a handler can pass it straight into the scoped data functions above.</p>
+
+    <div class="code"><div class="label"><span>glue-composer/src/lib/apiGuard.ts &middot; app/api/admin/tenants/route.ts</span><span class="lang">ts</span></div><pre><code><span class="c-cm">// Tenant-aware guard: resolves context, checks the per-tenant roles,</span>
+<span class="c-cm">// and RETURNS the tenantId for the handler to use.</span>
+<span class="c-kw">export async function</span> <span class="c-fn">requirePermission</span>(perm: <span class="c-fn">Permission</span>) {
+  <span class="c-kw">const</span> ctx = <span class="c-kw">await</span> <span class="c-fn">getTenantContext</span>();
+  <span class="c-kw">if</span> (!<span class="c-fn">hasPermission</span>(ctx.effectiveRoles, perm)) <span class="c-kw">throw new</span> <span class="c-fn">Error</span>(<span class="c-st">"FORBIDDEN"</span>);
+  <span class="c-kw">return</span> { tenantId: ctx.tenantId };
+}
+
+<span class="c-cm">// Super-User-only admin route: create a tenant.</span>
+<span class="c-kw">export async function</span> <span class="c-fn">POST</span>(req: <span class="c-fn">Request</span>) {
+  <span class="c-kw">const</span> ctx = <span class="c-kw">await</span> <span class="c-fn">getTenantContext</span>();
+  <span class="c-kw">if</span> (!ctx.isGlobalSuperAdmin) <span class="c-kw">return</span> <span class="c-fn">forbidden</span>();
+
+  <span class="c-kw">const</span> { slug, name } = <span class="c-kw">await</span> req.<span class="c-fn">json</span>();
+  <span class="c-kw">const</span> tenant = <span class="c-kw">await</span> <span class="c-fn">createTenant</span>({ slug, name });
+  <span class="c-kw">return</span> <span class="c-fn">Response</span>.<span class="c-fn">json</span>(tenant, { status: <span class="c-nm">201</span> });
+}</code></pre></div>
+
+    <p>The <b>Super User</b> (<code>isGlobalSuperAdmin</code>) sits above the per-tenant model. They can create and delete
+      tenants, assign users to tenants, and view tenant-level stats and admin info. New screens live under
+      <code>glue-composer/src/app/admin/</code>:</p>
+    <div class="grid c3">
+      <div class="card"><h4>Tenants</h4><p style="margin:2px 0 0">List, create, and delete tenants (slug + display name).</p></div>
+      <div class="card"><h4>Members</h4><p style="margin:2px 0 0">Assign users to a tenant and set their per-tenant roles.</p></div>
+      <div class="card"><h4>Stats</h4><p style="margin:2px 0 0">Page counts, publish status, and activity per tenant.</p></div>
+    </div>
+
+    <h2><span class="n">4</span>Editor UX &amp; guardrails</h2>
+    <p>Scoping is invisible if the UI makes the active tenant obvious and hard to confuse. The composer header carries a
+      persistent <b>tenant switcher tinted with the tenant's brand colour</b>, so an editor always knows whose site they
+      are editing.</p>
+    <div class="grid c2">
+      <div class="card"><h4>Tenant switcher</h4><p style="margin:2px 0 0">Always in the header, tinted with the tenant brand colour; switching re-scopes the whole workspace.</p></div>
+      <div class="card"><h4>Mid-edit guardrail</h4><p style="margin:2px 0 0">Switching tenants with unsaved changes prompts a confirm dialog before discarding.</p></div>
+      <div class="card"><h4>Per-tenant page list</h4><p style="margin:2px 0 0">The page list only ever shows the active tenant's content — no cross-tenant bleed.</p></div>
+      <div class="card"><h4>Confirmations that name the tenant</h4><p style="margin:2px 0 0">Publish and delete dialogs restate the tenant name so a destructive action is never ambiguous.</p></div>
+    </div>
+    <p>Every list and picker has a clear <b>empty state</b>: no pages yet, no tenants assigned, or no members — each with
+      the right next action for the user's role.</p>
+
+    <h2><span class="n">5</span>Also fixed here</h2>
+    <div class="warn"><b>Two currently unguarded routes get locked down.</b> <code>PUT /api/webpageContent/[id]</code> and
+      <code>/api/webpage/list</code> today have <b>no permission check</b> and no tenant scoping — both gain
+      <code>requirePermission()</code> plus the <code>tenantId</code> filter, closing an IDOR gap. Separately, the
+      full-database snapshot endpoint (<code>db-snapshot/create</code>) is restricted to the <b>Super User</b> only, since
+      it can read across every tenant.</div>
+
+    <h2>Files touched</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Path</th><th>Change</th></tr></thead>
+      <tbody>
+        <tr><td class="pick">glue-composer/src/lib/tenantContext.ts</td><td><span class="badge mvp">new</span> Single source of the tenant id from the validated cookie + memberships.</td></tr>
+        <tr><td class="pick">glue-composer/src/lib/webpages.ts</td><td>Every function gains a required <code>tenantId</code>; folded into filters and inserts.</td></tr>
+        <tr><td class="pick">glue-composer/src/lib/webpageContent.ts</td><td>Same tenant scoping across reads, updates, and deletes.</td></tr>
+        <tr><td class="pick">glue-composer/src/lib/apiGuard.ts</td><td><code>requirePermission()</code> becomes tenant-aware and returns <code>{ tenantId }</code>.</td></tr>
+        <tr><td class="pick">glue-composer/src/lib/serverPermission.ts</td><td><code>serverCan()</code> resolves per-tenant roles from context.</td></tr>
+        <tr><td class="pick">glue-composer/src/hooks/usePermission.ts</td><td>Client hook reads the active tenant's effective roles.</td></tr>
+        <tr><td class="pick">glue-composer/src/app/utils/getSession.ts</td><td>Exposes <code>userId</code> and <code>isGlobalSuperAdmin</code>.</td></tr>
+        <tr><td class="pick">glue-composer/src/app/api/{tenant,webpage,admin}/**</td><td>Route handlers derive <code>tenantId</code> from context; admin routes Super-User-guarded.</td></tr>
+        <tr><td class="pick">glue-composer/src/app/select-tenant</td><td><span class="badge mvp">new</span> Tenant chooser for multi-tenant users.</td></tr>
+        <tr><td class="pick">glue-composer/src/app/admin</td><td><span class="badge later">later</span> Tenants list/create/delete, members, and stats screens.</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="pagenav"><a class="prev" href="index.html"><div class="dir">&larr; Prev</div><div class="ttl">Overview</div></a><a class="next" href="data-model.html"><div class="dir">Next &rarr;</div><div class="ttl">2 &middot; Data Model &amp; Isolation</div></a></div>
+    <div class="footer">Clouda Glue Solutions &middot; Multi-Tenancy Documentation &middot; Proposed &mdash; awaiting approval.</div>
+  </main>
+</div>
+</body>
+</html>

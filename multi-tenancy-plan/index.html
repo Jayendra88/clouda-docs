@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Multi-Tenancy Plan · Clouda Glue Solutions</title>
+<style>
+  :root{
+    --orange:#f96f2d; --orange-soft:#fff1e9;
+    --ink:#1a1d24; --muted:#5b6472; --line:#e6e9ef;
+    --bg:#f7f8fa; --card:#ffffff; --code:#0f172a; --code-bg:#f2f4f8;
+    --blue:#2563eb; --green:#0f9d58; --red:#e5484d; --amber:#c77700;
+    --radius:14px; --maxw:920px;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:"SFMono-Regular",ui-monospace,Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  a{color:var(--orange);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{font-family:var(--mono);font-size:.86em;background:var(--code-bg);
+    color:#334155;padding:.12em .4em;border-radius:5px;word-break:break-word}
+
+  /* Layout */
+  .wrap{display:grid;grid-template-columns:260px minmax(0,1fr);gap:0;max-width:1240px;margin:0 auto}
+  nav.toc{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;
+    padding:28px 20px;border-right:1px solid var(--line);background:var(--card)}
+  nav.toc .brand{font-weight:700;font-size:15px;letter-spacing:.2px;margin-bottom:2px}
+  nav.toc .brand span{color:var(--orange)}
+  nav.toc .sub{color:var(--muted);font-size:12.5px;margin-bottom:20px}
+  nav.toc a{display:block;color:var(--muted);font-size:13.5px;padding:6px 10px;border-radius:8px;
+    line-height:1.35}
+  nav.toc a:hover{background:var(--orange-soft);color:var(--ink);text-decoration:none}
+  nav.toc a.section{margin-top:14px;font-weight:600;color:var(--ink);font-size:12px;
+    text-transform:uppercase;letter-spacing:.6px;padding-left:10px;pointer-events:none}
+  main{padding:48px clamp(20px,5vw,64px) 96px;min-width:0}
+
+  /* Hero */
+  header.hero{margin-bottom:40px}
+  .status{display:inline-flex;align-items:center;gap:7px;background:var(--orange-soft);
+    color:var(--amber);font-weight:600;font-size:12.5px;padding:5px 12px;border-radius:999px;
+    border:1px solid #ffd9c2}
+  .status::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--orange)}
+  h1{font-size:clamp(28px,4.5vw,40px);line-height:1.15;margin:16px 0 10px;letter-spacing:-.5px}
+  .lede{font-size:18px;color:var(--muted);max-width:70ch;margin:0}
+  .chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}
+  .chip{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;
+    min-width:170px;flex:1 1 190px}
+  .chip .k{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:600}
+  .chip .v{font-weight:650;font-size:14.5px;margin-top:3px}
+
+  /* Sections */
+  section{margin-top:44px;scroll-margin-top:24px}
+  h2{font-size:23px;letter-spacing:-.3px;margin:0 0 6px;padding-bottom:10px;border-bottom:2px solid var(--line)}
+  h2 .num{color:var(--orange);font-weight:800;margin-right:10px}
+  h3{font-size:16.5px;margin:22px 0 6px}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0;padding-left:22px}
+  li{margin:6px 0}
+  .goal{color:var(--muted);font-style:italic;margin:4px 0 14px}
+
+  /* Cards */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:22px 24px;margin:16px 0;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+  .phase{border-left:4px solid var(--orange)}
+  .phase.later{border-left-color:#c8cdd6}
+  .files{font-size:13px;color:var(--muted);margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}
+  .files b{color:var(--ink)}
+
+  /* Grid of key architecture points */
+  .arch{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:8px}
+  .arch .item{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .arch .item h4{margin:0 0 6px;font-size:14.5px;color:var(--orange)}
+  .arch .item p{margin:0;font-size:14px;color:var(--ink)}
+
+  /* Table */
+  .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);margin:16px 0}
+  table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#fafbfc;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+  tr:last-child td{border-bottom:none}
+
+  /* Risk list */
+  .risk{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--line)}
+  .risk:last-child{border-bottom:none}
+  .risk .n{flex:none;width:30px;height:30px;border-radius:8px;background:var(--orange-soft);color:var(--orange);
+    font-weight:700;display:flex;align-items:center;justify-content:center;font-size:14px}
+  .risk .body{min-width:0}
+  .risk .body b{display:block;margin-bottom:2px}
+  .risk .body span{color:var(--muted);font-size:14.5px}
+  .sev{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:6px;margin-left:6px;
+    vertical-align:middle}
+  .sev.crit{background:#fdecec;color:var(--red)}
+  .sev.high{background:#fff3e0;color:var(--amber)}
+  .sev.med{background:#eef2ff;color:var(--blue)}
+
+  /* Callout */
+  .note{background:var(--orange-soft);border:1px solid #ffd9c2;border-radius:12px;padding:14px 18px;
+    font-size:14.5px;margin:16px 0}
+  .footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+
+  @media (max-width:880px){
+    .wrap{grid-template-columns:1fr}
+    nav.toc{position:static;height:auto;border-right:none;border-bottom:1px solid var(--line)}
+    main{padding:32px 20px 72px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="toc">
+    <div class="brand">Clouda <span>Glue</span></div>
+    <div class="sub">Multi-Tenancy Implementation Plan</div>
+    <a class="section">Overview</a>
+    <a href="#context">Context</a>
+    <a href="#architecture">Architecture at a glance</a>
+    <a class="section">MVP (Phases 0–4)</a>
+    <a href="#p0">0 · Data foundation</a>
+    <a href="#p1">1 · glue-main scoping</a>
+    <a href="#p2">2 · Theming foundation</a>
+    <a href="#p3">3 · Composer tenancy</a>
+    <a href="#p4">4 · Onboard 2nd tenant</a>
+    <a class="section">Beyond MVP</a>
+    <a href="#later">Phases 5–8</a>
+    <a class="section">Reference</a>
+    <a href="#areas">Areas of change</a>
+    <a href="#risks">Risks &amp; mitigations</a>
+    <a href="#ux">UX suggestions</a>
+    <a href="#verify">Verification</a>
+  </nav>
+
+  <main>
+    <header class="hero">
+      <span class="status">Proposed — awaiting approval</span>
+      <h1>Multi-Tenancy for Clouda Glue Solutions</h1>
+      <p class="lede">Run many tenant websites from one codebase — the same public app deployed per
+        domain, one composer with a post-login tenant selector, per-tenant themes, and component
+        visibility scoped global / shared / tenant-specific.</p>
+      <div class="chips">
+        <div class="chip"><div class="k">Data isolation</div><div class="v">Shared DB + tenantId</div></div>
+        <div class="chip"><div class="k">Deployment</div><div class="v">Deploy per tenant</div></div>
+        <div class="chip"><div class="k">Theming</div><div class="v">Foundation-first, then waves</div></div>
+        <div class="chip"><div class="k">Rollout</div><div class="v">MVP: one 2nd tenant live</div></div>
+      </div>
+    </header>
+
+    <section id="context">
+      <h2>Context</h2>
+      <p>Clouda wants to run <b>many tenant websites from one codebase</b>: the same <code>glue-main</code>
+        app deployed to multiple domains (one per tenant), a single <code>glue-composer</code> where an
+        editor picks a tenant after login and manages that tenant's pages, a component library that can mark
+        components as tenant-specific / shared-with-some / global, and <b>completely different themes per
+        tenant</b>.</p>
+      <p>Today the platform is strictly single-tenant:</p>
+      <ul>
+        <li><b>Monorepo</b> (npm workspaces): <code>glue-components</code> (published
+          <code>@clouda-inc/glue-components</code>, ~64 components), <code>glue-main</code> (Next 14 public
+          site, Amplify → clouda.io), <code>glue-composer</code> (Next CMS, Cognito + NextAuth).</li>
+        <li><b>One MongoDB <code>glue</code> DB</b> shared by both apps; collections <code>webpages</code> +
+          <code>webpage_content</code>; <b>no <code>tenantId</code> anywhere</b>.
+          <code>getGlobalSection()</code>/<code>getHomePage()</code> return the <i>first</i> matching doc
+          unfiltered — a direct cross-tenant hazard once data is shared.</li>
+        <li><b><code>block.name</code> → component</b> via <code>glue-main/src/components/CloudaComponent.tsx</code>.</li>
+        <li><b>Theming = per-page inline colors</b> plus <b>~500 hardcoded brand hex</b>
+          (<code>#F96F2D</code>, etc.) across 80+ component files; global CSS class names; empty Tailwind
+          color config.</li>
+        <li><b>Composer auth</b> = Cognito groups → flat global roles
+          (<code>super-admin|admin|editor|viewer</code>); the palette lists all 64 components flat from
+          <code>dist/cms/schema.json</code>.</li>
+      </ul>
+      <div class="note"><b>Decisions confirmed with the user:</b> (1) Shared DB + <code>tenantId</code>
+        discriminator; (2) deploy-per-tenant for <code>glue-main</code>, code kept host-resolution-capable;
+        (3) foundation-first theming then incremental component waves; (4) MVP-first — get one real second
+        tenant fully live before building the heavier admin/registry surface.</div>
+      <p><b>Outcome:</b> a tenant-aware platform where a new tenant = one templated Amplify deploy + one
+        <code>tenants</code> row + a theme, with complete data isolation enforced at the data layer.</p>
+    </section>
+
+    <section id="architecture">
+      <h2>Architecture at a glance</h2>
+      <div class="arch">
+        <div class="item"><h4>Isolation</h4><p>Every tenant-owned doc carries <code>tenantId</code> (the
+          tenant slug). All DB access flows through a <b>mandatory tenant-scoping repository</b> that
+          force-injects <code>tenantId</code> on every read <i>and</i> write — an un-scoped query becomes
+          structurally impossible. A <code>dbName</code> field is the escape hatch to DB-per-tenant later.</p></div>
+        <div class="item"><h4>Shared data package</h4><p>Extract <code>packages/db</code> to kill the
+          duplicated <code>startMongo.ts</code> and near-duplicate data-access files across both apps, and
+          host the repository + migrations in one enforced place.</p></div>
+        <div class="item"><h4>Tenant resolution</h4><p><code>resolveTenant()</code> reads
+          <code>TENANT_SLUG</code> (primary, deploy-per-tenant) and falls back to the <code>Host</code>
+          header (kept for a future consolidated deploy / local preview).</p></div>
+        <div class="item"><h4>Theming</h4><p>Semantic <b>design tokens</b> (<code>--glue-*</code> CSS
+          variables) injected server-side per tenant, with Tailwind mapped to those vars. Precedence:
+          <b>tenant theme &lt; page override &lt; block override</b>.</p></div>
+        <div class="item"><h4>Composer tenancy</h4><p>One shared composer; tenant chosen post-login, stored
+          in an httpOnly cookie validated against Mongo <code>tenant_users</code> memberships. A single
+          <code>getTenantContext()</code> is the only source of <code>tenantId</code> — never the request body.</p></div>
+        <div class="item"><h4>Component scoping = metadata</h4><p>One shared library; a
+          <code>component_registry</code> collection marks each component global / tenant-list /
+          tenant-specific. Missing row ⇒ global (safe default). No per-tenant forks.</p></div>
+      </div>
+    </section>
+
+    <section id="p0">
+      <h2><span class="num">0</span>Data foundation &amp; shared repository</h2>
+      <p class="goal">Goal: introduce tenancy plumbing while <code>www.clouda.io</code> behaves exactly as today. No behavior change.</p>
+      <div class="card phase">
+        <ol>
+          <li><b>Create <code>packages/db</code> workspace</b>; add <code>"packages/*"</code> to root
+            workspaces; wire into both apps via <code>transpilePackages</code> + webpack alias (mirroring the
+            existing glue-components setup).
+            <ul>
+              <li><code>mongo.ts</code> — one merged <code>startMongo</code> (keep composer's
+                <code>serverApi</code> options + dev HMR guard).</li>
+              <li><code>tenants.ts</code> — <code>getTenantBySlug</code> / <code>getTenantByDomain</code>
+                (the only <b>un</b>-scoped lookups; they <i>are</i> the scoping source).</li>
+              <li><code>repository.ts</code> — <code>getTenantRepo(tenant)</code>; the scoped wrapper spreads
+                <code>{ tenantId }</code> <b>last</b> on every filter and forces it on every insert/replace;
+                never returns a raw collection.</li>
+            </ul>
+          </li>
+          <li><b>Seed the <code>tenants</code> collection</b> + default tenant <code>clouda</code>
+            (domains, primaryDomain, baseUrl, theme ref, analytics, integrations, status,
+            <code>dbName:"glue"</code>). Unique indexes on <code>slug</code> and <code>domains</code>.
+            Secrets are not stored plaintext here.</li>
+          <li><b>Add <code>tenant_users</code> + <code>component_registry</code> collections</b> now so
+            migrations are one pass.</li>
+          <li><b>Build <code>tenantId</code>-leading compound indexes</b> before backfill:
+            <code>webpage_content {tenantId, pagePath, status}</code>, <code>{tenantId, parentId}</code>;
+            <code>webpages {tenantId, type, status}</code>. Partial-unique <code>{tenantId, pagePath}</code>
+            where <code>status:"live"</code>.</li>
+          <li><b>Idempotent, reversible backfill script</b>: set <code>tenantId:"clouda"</code> on existing
+            docs where absent; verify count of un-tenanted docs is 0. Ship code first, then backfill; a
+            transitional <code>$or</code> keeps un-migrated docs visible during the window.</li>
+          <li><b>ESLint + CI gate</b>: forbid importing <code>startMongo</code> or referencing raw
+            collections outside <code>packages/db</code> — a forgotten filter becomes a build failure.</li>
+        </ol>
+        <div class="files"><b>Files:</b> <code>packages/db/src/{mongo,tenants,repository}.ts</code>,
+          root <code>package.json</code>, <code>glue-main/next.config.mjs</code>, <code>glue-composer/next.config.*</code></div>
+      </div>
+    </section>
+
+    <section id="p1">
+      <h2><span class="num">1</span>glue-main: tenant resolution, scoped reads, per-tenant config</h2>
+      <p class="goal">Goal: the public site is fully tenant-driven but identical for <code>clouda</code>.</p>
+      <div class="card phase">
+        <ol>
+          <li><b><code>resolveTenant(host?)</code></b> — return <code>getTenantBySlug(process.env.TENANT_SLUG)</code>
+            when pinned; else <code>getTenantByDomain(host)</code>; else 404. Wrapped in React
+            <code>cache()</code>. Set <code>TENANT_SLUG=clouda</code> on the existing Amplify app.</li>
+          <li><b>Extend <code>middleware.ts</code></b> to also set <code>x-tenant-host</code> from the Host
+            header (unused while env-pinned; ready for host mode).</li>
+          <li><b>Refactor data access</b> to take a <code>tenant</code> and go through
+            <code>getTenantRepo</code>; thread it through layout, pages, sitemap, robots, draft. Fixes the
+            unfiltered <code>getGlobalSection()</code>/<code>getHomePage()</code> and the full-collection scan.</li>
+          <li><b>Move hardcoded config to the tenant record</b>: GTM, Zoho SalesIQ, PageSense, marketing
+            pixel, <code>metadataBase</code> (also fixes the existing <code>.com</code> vs <code>.io</code>
+            mismatch), sitemap/robots base URL, and the draft secret. Real secrets go to AWS SSM /
+            Secrets Manager, not Mongo.</li>
+          <li><b><code>generateStaticParams(tenant)</code></b> scopes to the pinned tenant — each build/CDN
+            contains only that tenant's HTML (secondary isolation boundary).</li>
+        </ol>
+        <div class="files"><b>Files:</b> <code>glue-main/src/app/layout.tsx</code>,
+          <code>app/[...slug]/page.tsx</code>, <code>src/lib/{webpageContent,webpages,constants,tenant}.ts</code>,
+          <code>src/middleware.ts</code>, <code>app/{sitemap,robots}.ts</code>, <code>app/api/draft/route.ts</code></div>
+      </div>
+    </section>
+
+    <section id="p2">
+      <h2><span class="num">2</span>Theming foundation</h2>
+      <p class="goal">Goal: a new tenant gets a visibly distinct theme immediately; component refactor comes in waves after.</p>
+      <div class="card phase">
+        <ol>
+          <li><b>Token layer in the library</b>: <code>theme/tokens.css</code> (default
+            <code>:root{--glue-*}</code> = current brand, so un-themed render is unchanged) +
+            <code>tokens.ts</code> (<code>ThemeTokens</code> type). Colors as RGB channels so opacity
+            utilities like <code>bg-primary/40</code> work.</li>
+          <li><b>Map Tailwind to the vars</b> in all three configs — additive, keeping existing content /
+            screens / transitions. Existing utility classes become theme-reactive without editing JSX.</li>
+          <li><b>Server-side injection</b> in <code>layout.tsx</code>: emit
+            <code>&lt;style id="glue-theme"&gt;:root{--glue-...}&lt;/style&gt;</code> from the resolved
+            tenant's theme (no FOUC), load tenant fonts, set favicon.</li>
+          <li><b>Preserve precedence</b>: tenant vars &lt; page override &lt; block override. Tokens are a new
+            fallback layer <i>underneath</i> the existing props — no signature change to
+            <code>CloudaComponent.tsx</code> or the layout initially.</li>
+          <li><b><code>themes</code> collection</b> (referenced by <code>tenants.themeId</code>): tokens,
+            fonts, logo. Editing UI arrives in Phase 6.</li>
+        </ol>
+        <div class="files"><b>Files:</b> <code>glue-components/theme/{tokens.css,tokens.ts}</code>,
+          <code>index.css</code>, all three <code>tailwind.config.*</code>,
+          <code>glue-main/src/app/layout.tsx</code>, <code>glue-main/src/lib/theme.ts</code></div>
+      </div>
+    </section>
+
+    <section id="p3">
+      <h2><span class="num">3</span>Composer: tenant context, per-tenant auth, scoped operations</h2>
+      <p class="goal">Goal: one composer where a user selects a tenant and can only touch that tenant's content.</p>
+      <div class="card phase">
+        <ol>
+          <li><b>Tenant context</b>: <code>getTenantContext()</code> → <code>{ tenantId, tenantSlug,
+            effectiveRoles, isGlobalSuperAdmin }</code>, from an httpOnly <code>active_tenant</code> cookie
+            validated against JWT memberships. Extend the NextAuth callbacks to load
+            <code>tenant_users</code> memberships. Add <code>POST /api/tenant/select</code> +
+            <code>/api/tenant/list</code> and a client <code>TenantProvider</code>.</li>
+          <li><b>Access model = Mongo <code>tenant_users</code></b> <code>{userId, tenantId, roles[], status}</code>
+            as source of truth; Cognito keeps only a global super-admin group. <code>requirePermission</code>
+            becomes tenant-aware and <b>returns the resolved <code>tenantId</code></b>; add
+            <code>requireTenantAccess</code>. <code>serverCan</code>/<code>usePermission</code> read effective
+            per-tenant roles (signatures unchanged).</li>
+          <li><b>Scope every content op</b>: add <code>tenantId</code> to every filter and insert;
+            <code>getWebpageById</code> returns null for a foreign tenant (kills IDOR); the create path stamps
+            <code>tenantId</code> from context.</li>
+          <li><b>Close pre-existing security gaps</b>: <code>PUT /api/webpageContent/[id]</code> and
+            <code>/api/webpage/list</code> are currently <b>unguarded</b>; <code>db-snapshot/create</code>
+            dumps <b>every</b> collection unscoped — restrict to global super-admin.</li>
+          <li><b>Middleware</b>: no valid active tenant on a scoped route → redirect to
+            <code>/select-tenant</code>; gate <code>/admin</code> to global super-admin.</li>
+        </ol>
+        <h3>Composer UX (Phase 3 deliverables)</h3>
+        <ul>
+          <li><b><code>/select-tenant</code> chooser</b> post-login (auto-select for single-tenant users).</li>
+          <li><b>Persistent tenant switcher</b> chip in the header, tinted with the tenant's brand color.</li>
+          <li><b>Mid-edit guardrail</b>: switching tenant with unsaved changes prompts confirm/discard.</li>
+          <li><b>Per-tenant page list</b> + empty states; publish/delete confirmations restate the tenant name.</li>
+        </ul>
+        <div class="files"><b>Files:</b> <code>glue-composer/src/lib/{tenantContext,webpages,webpageContent,apiGuard,serverPermission}.ts</code>,
+          <code>hooks/usePermission.ts</code>, <code>app/utils/getSession.ts</code>,
+          <code>types/next-auth.d.ts</code>, <code>middleware.ts</code>, <code>app/api/{tenant,webpage,webpageContent}/**</code></div>
+      </div>
+    </section>
+
+    <section id="p4">
+      <h2><span class="num">4</span>MVP milestone: onboard a real second tenant</h2>
+      <p class="goal">Goal: prove the whole loop end-to-end.</p>
+      <div class="card phase">
+        <ol>
+          <li><b>Reusable IaC</b> (CDK or Terraform Amplify module) parameterized by
+            <code>tenantSlug</code>, <code>domains</code>, secret ARNs; reuse the existing
+            <code>amplify.yml</code> unchanged.</li>
+          <li><b>Onboard tenant #2</b>: <code>tenants</code> row + <code>themes</code> row (distinct
+            palette/fonts) + SSM secrets + one Amplify app instance with its domain and
+            <code>TENANT_SLUG</code>.</li>
+          <li><b>Composer loop</b>: super-admin creates the tenant, assigns an editor, the editor selects it,
+            builds pages from global components, and the site renders on the new domain with its own theme.</li>
+          <li><b>ISR + on-demand revalidation</b> (closes a gap where publishing doesn't update the live site
+            until a rebuild): a secured <code>POST /api/revalidate</code> invoked by composer publish.</li>
+        </ol>
+      </div>
+    </section>
+
+    <section id="later">
+      <h2>Later phases — documented now, built after MVP</h2>
+      <div class="card phase later">
+        <h3>Phase 5 — Component library at scale</h3>
+        <p>Replace the monolithic <code>cms/schema.json</code> (~11.8k lines) with <b>per-component
+          manifests</b> co-located with each component (<code>schema</code> +
+          <code>meta{category, tags, thumbnail, status, version, defaultVisibility}</code>). A Rollup prebuild
+          aggregates them into a byte-compatible <code>dist/cms/schema.json</code> (composer contract
+          unchanged) plus a new <code>dist/cms/manifest.json</code>. Add a manifest lint; keep the single
+          package, add <code>exports</code> subpaths and move toward named exports for tree-shaking.</p>
+      </div>
+      <div class="card phase later">
+        <h3>Phase 6 — Component visibility + palette + admin UIs</h3>
+        <p><code>component_registry</code> visibility resolution (<code>getVisibleComponents(tenantId)</code>);
+          rebuild the flat 64-item list into a <b>searchable, category-grouped palette</b> (validate blocks on
+          save). <code>src/app/admin/**</code> for global super-admin: tenants CRUD, members &amp; roles,
+          component-visibility matrix, and the <b>theme editor with live iframe preview</b>.</p>
+      </div>
+      <div class="card phase later">
+        <h3>Phase 7 — Component theming waves</h3>
+        <p>Codemod + human review to migrate ~500 hardcoded hex / ~1000 color-prop usages to tokens,
+          prioritized chrome → high-use cards → long tail; migrate global CSS to CSS Modules to remove
+          collision risk; retire the <code>isLightTheme</code> hex-guessing and <code>AutoSwapColor</code>
+          legacy paths last.</p>
+      </div>
+      <div class="card phase later">
+        <h3>Phase 8 — Backup / restore hardening</h3>
+        <p>Per-tenant page backup/restore filtered by <code>tenantId</code>; restore forces target
+          <code>tenantId</code> and rejects mismatches; full-DB snapshot stays global-super-admin only.</p>
+      </div>
+    </section>
+
+    <section id="areas">
+      <h2>Areas of code that change</h2>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Area</th><th>Files (representative)</th><th>Change</th></tr></thead>
+          <tbody>
+            <tr><td>Shared data layer (new)</td><td><code>packages/db/src/{mongo,tenants,repository}.ts</code></td><td>Merged Mongo client + mandatory tenant-scoping repo + migrations</td></tr>
+            <tr><td>glue-main reads/config</td><td><code>glue-main/src/lib/{webpageContent,webpages,tenant,theme}.ts</code>, <code>app/layout.tsx</code>, <code>app/[...slug]/page.tsx</code>, <code>app/{sitemap,robots}.ts</code>, <code>middleware.ts</code>, <code>api/draft</code></td><td>Tenant resolution, scoped queries, per-tenant config, token injection, ISR</td></tr>
+            <tr><td>Theming</td><td><code>glue-components/theme/*</code>, <code>index.css</code>, all three <code>tailwind.config.*</code></td><td>Design tokens + Tailwind var mapping</td></tr>
+            <tr><td>Composer auth/context</td><td><code>glue-composer/src/lib/{tenantContext,apiGuard,serverPermission,webpages,webpageContent}.ts</code>, <code>hooks/usePermission.ts</code>, <code>app/utils/getSession.ts</code>, <code>types/next-auth.d.ts</code>, <code>middleware.ts</code></td><td>Tenant context, per-tenant roles, scoped ops, close unguarded routes</td></tr>
+            <tr><td>Composer UX</td><td><code>Header.tsx</code>, <code>app/select-tenant/*</code>, <code>editForm/{editFormPage,sectionRenderer}.tsx</code></td><td>Tenant switcher, chooser, guardrails, palette (Phase 6)</td></tr>
+            <tr><td>Component registry (later)</td><td><code>glue-components/**/&lt;Component&gt;.manifest.ts</code>, <code>rollup.config.mjs</code>, <code>component_registry</code>, <code>src/app/admin/**</code></td><td>Manifests, visibility, admin UIs</td></tr>
+            <tr><td>Deploy</td><td>IaC module, <code>amplify.yml</code> (unchanged), SSM secrets</td><td>One templated Amplify app per tenant</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="risks">
+      <h2>Risks &amp; mitigations</h2>
+      <div class="card">
+        <div class="risk"><div class="n">1</div><div class="body"><b>Cross-tenant data leakage<span class="sev crit">Critical</span></b><span>Mandatory <code>getTenantRepo</code> forces <code>tenantId</code> (spread last) on every read/write; no raw <code>.collection()</code> outside <code>packages/db</code>; ESLint + CI gate; tenantId-leading indexes; deploy-per-tenant artifact isolation. Composer derives tenantId only from <code>getTenantContext()</code>.</span></div></div>
+        <div class="risk"><div class="n">2</div><div class="body"><b>Partial / failed backfill hides pages<span class="sev high">High</span></b><span>Additive, idempotent, <code>$exists:false</code>-guarded; indexes before backfill; transitional <code>$or</code> default match; verify count == 0; reversible (drop field/indexes reverts to single-tenant).</span></div></div>
+        <div class="risk"><div class="n">3</div><div class="body"><b>SSG blow-up / stale cache<span class="sev high">High</span></b><span>Deploy-per-tenant scopes <code>generateStaticParams</code>; ISR + on-demand <code>revalidatePath</code> on publish; per-domain CDN naturally isolated.</span></div></div>
+        <div class="risk"><div class="n">4</div><div class="body"><b>Duplicated data-access drift<span class="sev med">Medium</span></b><span>Eliminated by <code>packages/db</code>; apps keep only thin serialization; lint forbids direct DB access.</span></div></div>
+        <div class="risk"><div class="n">5</div><div class="body"><b>Pre-existing security holes<span class="sev high">High</span></b><span>Unguarded <code>PUT /api/webpageContent/[id]</code> &amp; <code>/api/webpage/list</code>; unscoped snapshot dump; hardcoded draft secret; <code>.com</code>/<code>.io</code> metadata mismatch — all fixed in Phases 1/3.</span></div></div>
+        <div class="risk"><div class="n">6</div><div class="body"><b>Theming regression across ~500 hex sites<span class="sev med">Medium</span></b><span>Foundation-first + tokens-as-fallback (never remove a working prop path in the same change); prioritized waves; publish between waves; CSS Modules migration in parallel.</span></div></div>
+        <div class="risk"><div class="n">7</div><div class="body"><b>Stale tenant context<span class="sev med">Medium</span></b><span>JWT maxAge 3600 vs membership change — re-validate membership at the data/guard layer on sensitive writes; invalid active tenant bounces to <code>/select-tenant</code>.</span></div></div>
+        <div class="risk"><div class="n">8</div><div class="body"><b>Host spoofing (consolidated mode only)<span class="sev med">Medium</span></b><span>Env-pin ignores Host; host mode validates against unique <code>tenants.domains</code> and 404s on miss.</span></div></div>
+        <div class="risk"><div class="n">9</div><div class="body"><b>Per-tenant deploy ops cost<span class="sev med">Medium</span></b><span>IaC module keeps a new tenant to one templated instance; revisit host-based consolidation beyond dozens of tenants (code already supports it).</span></div></div>
+      </div>
+    </section>
+
+    <section id="ux">
+      <h2>UX suggestions</h2>
+      <ul>
+        <li><b>Post-login tenant chooser</b> with tenant cards (logo, brand tint, your role); auto-select for single-tenant users.</li>
+        <li><b>Always-visible active-tenant chip</b> in the composer header, tinted with the brand color; tenant name in the tab title — so no one edits the wrong site.</li>
+        <li><b>Mid-edit switch guardrail</b> with unsaved-changes confirmation.</li>
+        <li><b>Searchable, category-grouped component palette</b> (Phase 6) replacing the flat 64-item list, with tenant-specific badges, thumbnails, keyboard nav, and a recently-used row.</li>
+        <li><b>Theme editor with live preview</b> (Phase 6): token form on the left, iframe rendering a representative page with draft tokens on the right, device toggle, draft-vs-published, and a "view on live domain" link.</li>
+        <li><b>Confirmations restate the tenant name</b> on publish/delete; clear empty states.</li>
+      </ul>
+    </section>
+
+    <section id="verify">
+      <h2>Verification</h2>
+      <ul>
+        <li><b>Isolation tests</b>: create pages under tenant A, assert tenant B's scoped ops return nothing / no-op; cross-tenant <code>_id</code> fetch → 404; assert every insert stamps <code>tenantId</code>.</li>
+        <li><b>Lint gate</b>: CI fails if any file outside <code>packages/db</code> imports <code>startMongo</code> or references raw collections.</li>
+        <li><b>Backfill dry-run</b> against a snapshot; assert un-tenanted count == 0 and <code>clouda</code> page counts unchanged.</li>
+        <li><b>glue-main parity</b>: with <code>TENANT_SLUG=clouda</code>, diff rendered HTML of key pages before/after Phases 1–2 (should be byte-identical); confirm GTM/Zoho/canonical/sitemap now derive from the tenant record.</li>
+        <li><b>Second-tenant E2E (MVP)</b>: onboard tenant #2, build + publish a page, confirm it renders on the new domain with its own theme and that tenant #1's content/theme never appear; confirm revalidation updates without a rebuild.</li>
+        <li><b>Auth</b>: <code>requirePermission</code> returns the resolved tenantId; a user without a membership for tenant X cannot read/write X; global super-admin can access all tenants; the two previously-unguarded routes now reject unauthorized/cross-tenant calls.</li>
+        <li><b>Theming</b>: render a component under two themes via <code>--glue-*</code> overrides; confirm page/block color overrides still win over tenant defaults.</li>
+      </ul>
+      <div class="note"><b>Sequencing:</b> Phases 0–4 are the MVP and each step is independently shippable and
+        single-tenant-safe — <code>www.clouda.io</code> behaves identically until tenant #2 is onboarded in
+        Phase 4. Phases 5–8 harden the platform in parallel tracks afterward.</div>
+    </section>
+
+    <div class="footer">
+      Clouda Glue Solutions · Multi-Tenancy Implementation Plan · Proposed, awaiting approval.
+      A companion <code>plan.md</code> lives beside this file in <code>multi-tenancy-plan/</code>.
+    </div>
+  </main>
+</div>
+</body>
+</html>

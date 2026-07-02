@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Per-Tenant Theming — Architecture &amp; Code · Clouda Glue</title>
+<style>
+  :root{
+    --orange:#f96f2d; --orange-soft:#fff2ea;
+    --ink:#161a21; --muted:#5c6673; --line:#e6eaf0; --bg:#f7f8fa; --card:#fff;
+    --code-bg:#0f172a; --code-fg:#e2e8f0; --code-line:#1e293b;
+    --blue:#2563eb; --green:#0f9d58; --purple:#7c5cff; --teal:#0ea5a5;
+    --radius:14px; --maxw:860px;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:"SFMono-Regular",ui-monospace,Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased}
+  a{color:var(--orange);text-decoration:none} a:hover{text-decoration:underline}
+  code{font-family:var(--mono);font-size:.86em;background:#eef1f5;color:#334155;padding:.12em .4em;border-radius:5px}
+  .wrap{display:grid;grid-template-columns:280px minmax(0,1fr);max-width:1300px;margin:0 auto}
+  nav.toc{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;padding:26px 18px;border-right:1px solid var(--line);background:var(--card)}
+  nav.toc .brand{font-weight:700;font-size:15px} nav.toc .brand span{color:var(--orange)}
+  nav.toc .sub{color:var(--muted);font-size:12.5px;margin-bottom:16px}
+  nav.toc a{display:block;color:var(--muted);font-size:13px;padding:5px 10px;border-radius:8px;line-height:1.35}
+  nav.toc a:hover{background:var(--orange-soft);color:var(--ink);text-decoration:none}
+  nav.toc a.sec{margin-top:12px;font-weight:700;color:var(--ink);font-size:11px;text-transform:uppercase;letter-spacing:.6px;pointer-events:none;padding-left:10px}
+  main{padding:44px clamp(20px,4vw,60px) 100px;min-width:0}
+  header.hero{margin-bottom:34px}
+  .eyebrow{display:inline-block;font-size:12px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--orange)}
+  h1{font-size:clamp(28px,4vw,38px);line-height:1.12;letter-spacing:-.5px;margin:12px 0 10px}
+  .lede{font-size:18px;color:var(--muted);max-width:70ch;margin:0}
+  section{margin-top:46px;scroll-margin-top:20px}
+  h2{font-size:24px;letter-spacing:-.3px;margin:0 0 8px;padding-bottom:10px;border-bottom:2px solid var(--line)}
+  h2 .n{color:var(--orange);font-weight:800;margin-right:8px}
+  h3{font-size:17.5px;margin:26px 0 6px}
+  h4{font-size:15px;margin:18px 0 4px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-size:12.5px}
+  p{margin:10px 0} ul,ol{margin:10px 0;padding-left:22px} li{margin:6px 0}
+  .lead{font-size:17.5px;color:var(--muted);max-width:72ch}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 22px;margin:16px 0;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+  .note{background:var(--orange-soft);border:1px solid #ffd9c2;border-radius:12px;padding:14px 18px;font-size:15px;margin:16px 0}
+  .warn{background:#fef6e7;border:1px solid #f6d98a;border-radius:12px;padding:14px 18px;font-size:15px;margin:16px 0}
+  .ok{background:#eaf7ef;border:1px solid #b6e2c6;border-radius:12px;padding:14px 18px;font-size:15px;margin:16px 0}
+
+  /* code */
+  .code{margin:16px 0;border-radius:12px;overflow:hidden;border:1px solid var(--code-line)}
+  .code .label{background:#0b1220;color:#93a4bd;font-family:var(--mono);font-size:12px;padding:8px 14px;border-bottom:1px solid var(--code-line);display:flex;justify-content:space-between}
+  .code .label .lang{color:#5f7191}
+  pre{background:var(--code-bg);color:var(--code-fg);margin:0;padding:16px 18px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.62}
+  pre code{background:none;color:inherit;padding:0;font-size:inherit}
+  .cm{color:#7c8aa5}   /* comment */
+  .kw{color:#c4b5fd}   /* keyword */
+  .st{color:#86efac}   /* string */
+  .fn{color:#7dd3fc}   /* function/name */
+  .at{color:#fca5a5}   /* attr/const */
+  .em{color:#fdba74;font-weight:600} /* emphasis */
+
+  /* layers diagram */
+  .diagram{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 18px;margin:18px 0;box-shadow:0 6px 24px rgba(16,24,40,.05)}
+  .diagram svg{width:100%;height:auto;display:block}
+  .diagram .cap{text-align:center;color:var(--muted);font-size:13.5px;margin-top:12px}
+
+  /* two-tenant compare */
+  .cmp{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0}
+  .cmp .t{border:1px solid var(--line);border-radius:12px;padding:16px 18px;background:var(--card)}
+  .cmp .t.a{border-top:4px solid var(--orange)} .cmp .t.b{border-top:4px solid var(--teal)}
+  .cmp h4{margin:0 0 8px;color:var(--ink);text-transform:none;letter-spacing:0;font-size:15px}
+  .cmp ul{padding-left:18px;margin:0;font-size:14.5px;color:var(--muted)}
+
+  .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);margin:16px 0}
+  table{border-collapse:collapse;width:100%;min-width:640px;font-size:14.5px}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#fafbfc;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+  tr:last-child td{border-bottom:none}
+  .footer{margin-top:52px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+  @media (max-width:900px){
+    .wrap{grid-template-columns:1fr}
+    nav.toc{position:static;height:auto;border-right:none;border-bottom:1px solid var(--line)}
+    main{padding:30px 20px 72px}
+    .cmp{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="toc">
+    <div class="brand">Clouda <span>Glue</span></div>
+    <div class="sub">Per-Tenant Theming — Architecture &amp; Code</div>
+    <a href="#model">The layered model</a>
+    <a href="#resolve">1 · How the theme changes per tenant</a>
+    <a href="#tokens">2 · The token contract</a>
+    <a class="sec">Shared components, many themes</a>
+    <a href="#colorshape">3 · Colours &amp; shapes (tokens)</a>
+    <a href="#variants">4 · Shape/layout variants</a>
+    <a href="#behavior">5 · Hover &amp; scroll behaviour</a>
+    <a href="#header">6 · Worked example: HeaderMain</a>
+    <a class="sec">Managing it</a>
+    <a href="#styles">7 · Where tenant styles live</a>
+    <a href="#different">8 · Completely different look &amp; feel</a>
+    <a href="#scale">9 · A large component library</a>
+    <a href="#concerns">10 · Other major concerns</a>
+    <a href="#rollout">Step-by-step rollout</a>
+  </nav>
+
+  <main>
+    <header class="hero">
+      <span class="eyebrow">Technical deep-dive</span>
+      <h1>Per-tenant theming with a shared component library</h1>
+      <p class="lede">How one shared library of components can render a <b>completely different look, feel and
+        behaviour</b> per tenant — including headers whose colours, shapes, hover effects and scroll-on-top
+        behaviour differ — without forking components per tenant. Companion to <a href="index.html">index.html</a> /
+        <a href="plan.html">plan.md</a> (Phases 2 &amp; 7).</p>
+    </header>
+
+    <!-- ===================== MODEL ===================== -->
+    <section id="model">
+      <h2>The layered model</h2>
+      <p class="lead">The mistake most teams make is trying to solve theming with one mechanism (usually a pile of
+        colour props). Different tenants differ in <em>colour</em>, in <em>shape</em>, and in <em>behaviour</em> —
+        and those need different tools. We use five layers, applied top-to-bottom, each handling more of the
+        divergence than the one below it, so per-tenant work stays tiny and the shared code stays generic.</p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 900 350" role="img" aria-label="Five theming layers from most-reused design tokens down to rare tenant-specific components.">
+          <defs>
+            <style>
+              .bx{stroke:#e0a582;stroke-width:1.4}
+              .t{font:700 15px var(--sans,sans-serif);fill:#3a2318}
+              .d{font:13px var(--sans,sans-serif);fill:#6b4a37}
+              .num{font:800 15px var(--sans,sans-serif);fill:#fff}
+              .axis{font:700 11px var(--sans,sans-serif);fill:#8a94a2;letter-spacing:.5px}
+            </style>
+          </defs>
+          <text class="axis" x="20" y="24">BROADEST · MOST REUSED</text>
+          <rect class="bx" x="60" y="34"  width="700" height="48" rx="10" fill="#ffe9dc"></rect>
+          <circle cx="86" cy="58" r="14" fill="#f96f2d"></circle><text class="num" x="86" y="63" text-anchor="middle">1</text>
+          <text class="t" x="116" y="54">Design tokens</text><text class="d" x="116" y="72">colours · typography · radius · spacing · shadow — CSS variables</text>
+
+          <rect class="bx" x="90" y="94"  width="640" height="48" rx="10" fill="#ffe0cd"></rect>
+          <circle cx="116" cy="118" r="14" fill="#f96f2d"></circle><text class="num" x="116" y="123" text-anchor="middle">2</text>
+          <text class="t" x="146" y="114">Component variants</text><text class="d" x="146" y="132">shape / layout / density options a theme selects (flat vs pill nav…)</text>
+
+          <rect class="bx" x="120" y="154" width="580" height="48" rx="10" fill="#ffd7bd"></rect>
+          <circle cx="146" cy="178" r="14" fill="#f96f2d"></circle><text class="num" x="146" y="183" text-anchor="middle">3</text>
+          <text class="t" x="176" y="174">Behaviour config</text><text class="d" x="176" y="192">hover style · scroll-on-top · motion — JS behaviour flags</text>
+
+          <rect class="bx" x="150" y="214" width="520" height="48" rx="10" fill="#ffceae"></rect>
+          <circle cx="176" cy="238" r="14" fill="#e8590c"></circle><text class="num" x="176" y="243" text-anchor="middle">4</text>
+          <text class="t" x="206" y="234">Tenant CSS overrides</text><text class="d" x="206" y="252">scoped escape hatch for bespoke tweaks (no code change)</text>
+
+          <rect class="bx" x="180" y="274" width="460" height="48" rx="10" fill="#ffc39c"></rect>
+          <circle cx="206" cy="298" r="14" fill="#d9480f"></circle><text class="num" x="206" y="303" text-anchor="middle">5</text>
+          <text class="t" x="236" y="294">Tenant-specific components</text><text class="d" x="236" y="312">rare — a genuinely unique block, still in the shared library</text>
+          <text class="axis" x="700" y="340" text-anchor="end">NARROWEST · RARELY NEEDED</text>
+        </svg>
+        <div class="cap">Reach for the highest layer that solves the problem. ~80% of tenant divergence is Layer 1 alone.</div>
+      </div>
+
+      <div class="tablewrap"><table>
+        <thead><tr><th>Layer</th><th>Handles</th><th>Mechanism</th><th>Per-tenant authoring</th></tr></thead>
+        <tbody>
+          <tr><td><b>1 · Tokens</b></td><td>Colour palette, fonts, corner radius, spacing, shadows</td><td>CSS custom properties (<code>--glue-*</code>) + Tailwind mapped to them</td><td>Data (theme record) — no code</td></tr>
+          <tr><td><b>2 · Variants</b></td><td>Structural shape/layout choices (flat vs boxed vs pill header)</td><td>A typed <code>variant</code> the component reads and maps to classes</td><td>Data (pick from an enum)</td></tr>
+          <tr><td><b>3 · Behaviour</b></td><td>Hover style, scroll-on-top, motion, sticky logic</td><td>Behaviour flags in a <code>ThemeProvider</code> context; component branches on them</td><td>Data (pick from an enum)</td></tr>
+          <tr><td><b>4 · Overrides</b></td><td>One-off bespoke tweaks for a single tenant</td><td>Scoped CSS <code>[data-tenant="x"]{…}</code> overriding tokens/classes</td><td>A small CSS string (theme editor / file)</td></tr>
+          <tr><td><b>5 · Components</b></td><td>A block only one tenant needs, or a radically unique one</td><td>A normal library component, gated by the component registry</td><td>Code (rare) + a registry row</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <!-- ===================== 1 RESOLUTION ===================== -->
+    <section id="resolve">
+      <h2><span class="n">1</span>How the theme changes based on the tenant</h2>
+      <p class="lead">Because we deploy one build per tenant, resolution is trivial and there is no per-request
+        lookup: the running site already knows which tenant it is from an env var. That tenant's theme is fetched
+        once, then applied two ways — <b>tokens injected as CSS variables server-side</b> (colours/shape, no flash)
+        and <b>variant/behaviour flags provided via React context</b> (structure/behaviour).</p>
+
+      <h4>The flow</h4>
+      <ol>
+        <li><code>resolveTenant()</code> reads <code>process.env.TENANT_SLUG</code> → loads the tenant + its theme record.</li>
+        <li>The root <code>layout.tsx</code> serialises the theme's tokens into a <code>&lt;style&gt;</code> block in <code>&lt;head&gt;</code> and stamps <code>data-tenant</code> / <code>data-theme</code> on <code>&lt;html&gt;</code>.</li>
+        <li>A <code>ThemeProvider</code> puts the <em>non-CSS</em> parts (variants, behaviour flags, asset URLs) on React context.</li>
+        <li>Components read tokens through CSS/Tailwind, and read variants/behaviour through <code>useTheme()</code>.</li>
+      </ol>
+
+      <div class="code">
+        <div class="label"><span>glue-main/src/app/layout.tsx (server component)</span><span class="lang">tsx</span></div>
+<pre><code><span class="kw">import</span> { resolveTenant } <span class="kw">from</span> <span class="st">"@/lib/tenant"</span>;
+<span class="kw">import</span> { themeToCssVars } <span class="kw">from</span> <span class="st">"@/lib/theme"</span>;
+<span class="kw">import</span> { ThemeProvider } <span class="kw">from</span> <span class="st">"@clouda-inc/glue-components/theme"</span>;
+
+<span class="kw">export default async function</span> <span class="fn">RootLayout</span>({ children }) {
+  <span class="kw">const</span> tenant = <span class="kw">await</span> <span class="fn">resolveTenant</span>();      <span class="cm">// from TENANT_SLUG (or Host)</span>
+  <span class="kw">const</span> theme  = tenant.theme;                <span class="cm">// tokens + variants + behaviour + assets</span>
+
+  <span class="kw">const</span> cssVars = <span class="fn">themeToCssVars</span>(theme.tokens); <span class="cm">// ":root{--glue-color-bg:#0a0a0a; ...}"</span>
+
+  <span class="kw">return</span> (
+    <span class="at">&lt;html</span> lang=<span class="st">"en"</span> data-tenant={tenant.slug} data-theme={theme.name}<span class="at">&gt;</span>
+      <span class="at">&lt;head&gt;</span>
+        {<span class="cm">/* Server-rendered = no flash of the wrong theme (FOUC) */</span>}
+        <span class="at">&lt;style</span> id=<span class="st">"glue-theme"</span> dangerouslySetInnerHTML={{ __html: cssVars }} <span class="at">/&gt;</span>
+        {theme.fonts.link &amp;&amp; <span class="at">&lt;link</span> rel=<span class="st">"stylesheet"</span> href={theme.fonts.link} <span class="at">/&gt;</span>}
+      <span class="at">&lt;/head&gt;</span>
+      <span class="at">&lt;body&gt;</span>
+        {<span class="cm">/* variants + behaviour + assets travel via context, not CSS */</span>}
+        <span class="at">&lt;ThemeProvider</span> value={theme}<span class="at">&gt;</span>{children}<span class="at">&lt;/ThemeProvider&gt;</span>
+      <span class="at">&lt;/body&gt;</span>
+    <span class="at">&lt;/html&gt;</span>
+  );
+}</code></pre>
+      </div>
+
+      <div class="code">
+        <div class="label"><span>glue-main/src/lib/theme.ts — tokens object → CSS string</span><span class="lang">ts</span></div>
+<pre><code><span class="kw">export function</span> <span class="fn">themeToCssVars</span>(tokens: Record&lt;string, string&gt;): string {
+  <span class="kw">const</span> body = <span class="fn">Object</span>.entries(tokens)
+    .map(([name, value]) =&gt; <span class="st">`--glue-${name}:${value};`</span>)
+    .join(<span class="st">""</span>);
+  <span class="kw">return</span> <span class="st">`:root{${body}}`</span>;
+}</code></pre>
+      </div>
+      <div class="note"><b>Why server-side injection?</b> If tokens loaded on the client, the first paint would use
+        the default theme, then visibly repaint into the tenant's theme (FOUC). Emitting the variables in the
+        server-rendered <code>&lt;head&gt;</code> means the correct colours are there on first paint.</div>
+    </section>
+
+    <!-- ===================== 2 TOKENS ===================== -->
+    <section id="tokens">
+      <h2><span class="n">2</span>The token contract</h2>
+      <p class="lead">Tokens are the single source of truth for the visual language. Components reference
+        <em>semantic</em> tokens (<code>surface</code>, <code>primary</code>) — never raw hex, never a specific
+        brand colour. The default values equal today's Clouda brand, so nothing changes until a tenant overrides them.</p>
+
+      <div class="code">
+        <div class="label"><span>glue-components/theme/tokens.css — defaults on :root</span><span class="lang">css</span></div>
+<pre><code>:root{
+  <span class="cm">/* colours — RGB *channels* so Tailwind's /alpha works: bg-primary/40 */</span>
+  --glue-color-bg:            10 10 10;
+  --glue-color-fg:            255 255 255;
+  --glue-color-primary:       249 111 45;   <span class="cm">/* Clouda orange */</span>
+  --glue-color-primary-fg:    255 255 255;
+  --glue-color-accent:        249 111 45;
+  --glue-color-surface:       17 19 23;
+  --glue-color-surface-fg:    232 234 237;   <span class="cm">/* paired fg — no "guess light/dark" */</span>
+  --glue-color-border:        38 41 47;
+  <span class="cm">/* shape */</span>
+  --glue-radius-sm: 4px;  --glue-radius-md: 10px;  --glue-radius-pill: 999px;
+  <span class="cm">/* type */</span>
+  --glue-font-sans:    Inter, system-ui, sans-serif;
+  --glue-font-heading: var(--glue-font-sans);
+  <span class="cm">/* header-specific shape tokens (used by the worked example) */</span>
+  --glue-header-height: 78px;
+  --glue-header-radius: 0px;
+}</code></pre>
+      </div>
+
+      <p><b>Map Tailwind to the tokens</b> so the thousands of existing utility classes become theme-aware with no
+        JSX rewrite. <code>text-fg</code>, <code>bg-surface</code>, <code>rounded-md</code> now follow the tenant.</p>
+      <div class="code">
+        <div class="label"><span>tailwind.config.js (shared across all three configs)</span><span class="lang">js</span></div>
+<pre><code>theme: {
+  extend: {
+    colors: {
+      bg:         <span class="st">"rgb(var(--glue-color-bg) / &lt;alpha-value&gt;)"</span>,
+      fg:         <span class="st">"rgb(var(--glue-color-fg) / &lt;alpha-value&gt;)"</span>,
+      primary:    <span class="st">"rgb(var(--glue-color-primary) / &lt;alpha-value&gt;)"</span>,
+      <span class="st">"primary-fg"</span>: <span class="st">"rgb(var(--glue-color-primary-fg) / &lt;alpha-value&gt;)"</span>,
+      accent:     <span class="st">"rgb(var(--glue-color-accent) / &lt;alpha-value&gt;)"</span>,
+      surface:    <span class="st">"rgb(var(--glue-color-surface) / &lt;alpha-value&gt;)"</span>,
+      <span class="st">"surface-fg"</span>: <span class="st">"rgb(var(--glue-color-surface-fg) / &lt;alpha-value&gt;)"</span>,
+    },
+    fontFamily: { sans: [<span class="st">"var(--glue-font-sans)"</span>], heading: [<span class="st">"var(--glue-font-heading)"</span>] },
+    <span class="cm">// distinct keys — do NOT reuse sm/md or you silently remap Tailwind's built-in rounded-sm/md everywhere</span>
+    borderRadius:{ <span class="st">"glue-sm"</span>:<span class="st">"var(--glue-radius-sm)"</span>, <span class="st">"glue-md"</span>:<span class="st">"var(--glue-radius-md)"</span>, pill:<span class="st">"var(--glue-radius-pill)"</span> },
+  }
+}</code></pre>
+      </div>
+      <div class="ok"><b>Rule of thumb:</b> in a component, <code>bg-surface text-surface-fg rounded-md</code> instead of
+        <code>bg-[#111317] text-white rounded-[10px]</code>. Same markup renders differently per tenant, for free.</div>
+    </section>
+
+    <!-- ===================== 3 COLOURS/SHAPES ===================== -->
+    <section id="colorshape">
+      <h2><span class="n">3</span>Components for different themes — colours &amp; shapes</h2>
+      <p class="lead">The bulk of "this header looks different" is colour and shape, and Layer 1 handles all of it.
+        The job is to <b>replace hardcoded values with token references</b>. Here is your real
+        <code>HeaderMain</code> pattern, before and after.</p>
+
+      <div class="code">
+        <div class="label"><span>Before — hardcoded (glue-components/components/header-main)</span><span class="lang">tsx</span></div>
+<pre><code><span class="cm">// colour decided by a brittle MULTI-clause hex-equality "is it light?" guess</span>
+<span class="kw">const</span> isLightTheame =
+  customBackgroundColor === <span class="st">"#ffffff"</span> || customBackgroundColor === <span class="st">"#fff"</span> ||
+  customForegroundColor === <span class="st">"#000"</span> || customForegroundColor === <span class="st">"black"</span>; <span class="cm">// ...5 clauses in the real file</span>
+<span class="cm">// hardcoded brand orange, hardcoded black gradient</span>
+borderBottom: <span class="st">"2px solid #F96F2D"</span>,
+background: <span class="st">"linear-gradient(180deg, #000000 16.74%, rgba(0,0,0,0) 99.42%)"</span>,</code></pre>
+      </div>
+
+      <div class="code">
+        <div class="label"><span>After — token-driven (works for every tenant)</span><span class="lang">tsx</span></div>
+<pre><code><span class="cm">// no guessing: the theme supplies a paired foreground for the header surface.</span>
+<span class="cm">// precedence preserved — an explicit prop still WINS; the token is the fallback.</span>
+&lt;div
+  className=<span class="st">"headerMain"</span>
+  style={{
+    background: headerBgColorOverride ?? <span class="st">"var(--glue-header-bg, rgb(var(--glue-color-bg)))"</span>,
+    color:      headerFgColorOverride ?? <span class="st">"var(--glue-header-fg, rgb(var(--glue-color-fg)))"</span>,
+    borderRadius: <span class="st">"var(--glue-header-radius)"</span>,
+  }}
+&gt;
+  {<span class="cm">/* the open-menu underline uses the accent token, not #F96F2D */</span>}
+  &lt;div style={{ borderBottom: <span class="st">"2px solid rgb(var(--glue-color-accent))"</span> }} /&gt;
+&lt;/div&gt;</code></pre>
+      </div>
+
+      <p>Now two tenants produce two headers from the <em>same component</em> just by shipping different token values:</p>
+      <div class="cmp">
+        <div class="t a">
+          <h4>Tenant A — dark, sharp, orange</h4>
+          <ul>
+            <li><code>--glue-color-bg: 10 10 10</code></li>
+            <li><code>--glue-color-accent: 249 111 45</code></li>
+            <li><code>--glue-header-radius: 0px</code></li>
+            <li><code>--glue-font-sans: Inter</code></li>
+          </ul>
+        </div>
+        <div class="t b">
+          <h4>Tenant B — light, rounded, teal</h4>
+          <ul>
+            <li><code>--glue-color-bg: 255 255 255</code></li>
+            <li><code>--glue-color-accent: 14 165 165</code></li>
+            <li><code>--glue-header-radius: 16px</code></li>
+            <li><code>--glue-font-sans: "Poppins"</code></li>
+          </ul>
+        </div>
+      </div>
+      <div class="warn"><b>Retire the light/dark guess.</b> The current <code>isLightTheame</code> hex-equality check
+        and <code>AutoSwapColor.ts</code> (which inverts a hex) are fragile — they break for any colour that isn't
+        pure black/white. Replace them with <b>explicit paired tokens</b> (<code>surface</code> + <code>surface-fg</code>):
+        the theme states its own foreground, so the component never has to infer contrast.</div>
+    </section>
+
+    <!-- ===================== 4 VARIANTS ===================== -->
+    <section id="variants">
+      <h2><span class="n">4</span>Shape / layout differences — component variants</h2>
+      <p class="lead">Some differences aren't a single value — they're a <em>structural</em> choice: a flat underline
+        nav vs. a boxed nav vs. a rounded pill nav. Model these as a small, typed <b>variant</b> the theme selects,
+        which the component maps to a set of classes. This keeps one component instead of three near-duplicates.</p>
+
+      <div class="code">
+        <div class="label"><span>glue-components/theme/types.ts — the variant contract</span><span class="lang">ts</span></div>
+<pre><code><span class="kw">export type</span> HeaderShape = <span class="st">"flat"</span> | <span class="st">"boxed"</span> | <span class="st">"pill"</span>;
+
+<span class="kw">export interface</span> ThemeVariants {
+  header: { shape: HeaderShape };
+  card:   { shape: <span class="st">"square"</span> | <span class="st">"rounded"</span>; elevation: <span class="st">"flat"</span> | <span class="st">"raised"</span> };
+  <span class="cm">// ...one entry per themable component</span>
+}</code></pre>
+      </div>
+
+      <div class="code">
+        <div class="label"><span>Component maps variant → classes (data-attribute keeps CSS declarative)</span><span class="lang">tsx</span></div>
+<pre><code><span class="kw">import</span> { useTheme } <span class="kw">from</span> <span class="st">"../theme"</span>;
+
+<span class="kw">const</span> { variants } = <span class="fn">useTheme</span>();
+<span class="kw">return</span> &lt;header className=<span class="st">"headerMain"</span> data-shape={variants.header.shape}&gt; ... &lt;/header&gt;;</code></pre>
+      </div>
+
+      <div class="code">
+        <div class="label"><span>glue-components/components/header-main/headerMain.css</span><span class="lang">css</span></div>
+<pre><code>.headerMain[data-shape=<span class="st">"flat"</span>]  .navItem { border-radius: 0; }
+.headerMain[data-shape=<span class="st">"boxed"</span>] .navItem { border-radius: var(--glue-radius-md);
+                                       background: rgb(var(--glue-color-surface)); padding: 8px 14px; }
+.headerMain[data-shape=<span class="st">"pill"</span>]  .navItem { border-radius: var(--glue-radius-pill);
+                                       padding: 8px 18px; }</code></pre>
+      </div>
+      <div class="note"><b>Why an enum, not free-form CSS?</b> A closed set of variants is testable (Storybook renders
+        all three), typed (a theme can't request a shape that doesn't exist), and keeps the design coherent. Free-form
+        per-tenant CSS is Layer 4 — the escape hatch, used sparingly.</div>
+    </section>
+
+    <!-- ===================== 5 BEHAVIOUR ===================== -->
+    <section id="behavior">
+      <h2><span class="n">5</span>Behaviour differences — hover &amp; scroll-on-top</h2>
+      <p class="lead">This is the part pure CSS can't fully cover. Your header has real behaviour: an animated
+        underline on hover, and a "transparent gradient at the top that solidifies once you scroll" effect driven by
+        <code>react-headroom</code> + a scroll listener. Different tenants may want <em>different behaviour</em>
+        (underline vs. fill hover; fade-in vs. always-solid vs. hide-on-scroll). Model behaviour as <b>flags</b> the
+        component branches on — CSS where possible, JS where necessary.</p>
+
+      <div class="code">
+        <div class="label"><span>glue-components/theme/types.ts — behaviour contract</span><span class="lang">ts</span></div>
+<pre><code><span class="kw">export type</span> HeaderHover  = <span class="st">"underline"</span> | <span class="st">"fill"</span> | <span class="st">"none"</span>;
+<span class="cm">// fade   = transparent at top, solidifies on scroll (today's Clouda behaviour)</span>
+<span class="cm">// solid  = always opaque</span>
+<span class="cm">// hide   = slides away scrolling down, returns scrolling up</span>
+<span class="cm">// shrink = stays, reduces height on scroll</span>
+<span class="kw">export type</span> HeaderScroll = <span class="st">"fade"</span> | <span class="st">"solid"</span> | <span class="st">"hide"</span> | <span class="st">"shrink"</span>;
+
+<span class="kw">export interface</span> ThemeBehaviour {
+  header: { hover: HeaderHover; scroll: HeaderScroll; motion: <span class="st">"full"</span> | <span class="st">"reduced"</span> };
+}</code></pre>
+      </div>
+
+      <h4>A · Hover — mostly CSS, switched by a data-attribute</h4>
+      <div class="code">
+        <div class="label"><span>headerMain.css — hover behaviour per flag</span><span class="lang">css</span></div>
+<pre><code><span class="cm">/* underline: the width 0 → 100% animation you already have */</span>
+.headerMain[data-hover=<span class="st">"underline"</span>] .navItem::after{
+  content:<span class="st">""</span>; position:absolute; left:0; bottom:0; height:2px; width:0;
+  background: rgb(var(--glue-color-accent)); transition: width .35s ease;
+}
+.headerMain[data-hover=<span class="st">"underline"</span>] .navItem:hover::after{ width:100%; }
+
+<span class="cm">/* fill: pill fills with accent on hover */</span>
+.headerMain[data-hover=<span class="st">"fill"</span>] .navItem{ transition: background .2s ease, color .2s ease; }
+.headerMain[data-hover=<span class="st">"fill"</span>] .navItem:hover{
+  background: rgb(var(--glue-color-accent)); color: rgb(var(--glue-color-primary-fg));
+}
+
+<span class="cm">/* honour the reduced-motion behaviour flag AND the OS setting */</span>
+@media (prefers-reduced-motion: reduce){
+  .headerMain .navItem::after{ transition:none; }
+}</code></pre>
+      </div>
+
+      <h4>B · Scroll-on-top — JS behaviour, gated by the flag</h4>
+      <p>The scroll effect needs JavaScript, so the component keeps <em>all</em> behaviours and picks one from the
+        flag. Today's "transparent-at-top, solid once you scroll" effect is produced by two cross-fading overlay
+        layers (<code>.gradientOverlay</code>) — <em>independent</em> of <code>react-headroom</code>, which the current
+        header engages unconditionally to hide/pin on scroll. We surface that overlay effect as the
+        <code>"fade"</code> branch and add <code>"solid"</code>, <code>"hide"</code> and <code>"shrink"</code> as
+        alternatives.</p>
+      <div class="code">
+        <div class="label"><span>HeaderMain.tsx — behaviour selected from theme, not hardcoded</span><span class="lang">tsx</span></div>
+<pre><code><span class="kw">const</span> { behaviour } = <span class="fn">useTheme</span>();
+<span class="kw">const</span> { hover, scroll } = behaviour.header;
+
+<span class="cm">// scroll/hover state that drives the "fade" branch (rAF listener, as in today's code)</span>
+<span class="kw">const</span> [isAtTop, setIsAtTop]   = <span class="fn">useState</span>(<span class="kw">true</span>);
+<span class="kw">const</span> [isHovered, setHovered] = <span class="fn">useState</span>(<span class="kw">false</span>);
+<span class="fn">useEffect</span>(() =&gt; {
+  <span class="kw">if</span> (scroll !== <span class="st">"fade"</span>) <span class="kw">return</span>;                 <span class="cm">// only "fade" needs a scroll listener</span>
+  <span class="kw">const</span> onScroll = () =&gt; <span class="fn">requestAnimationFrame</span>(() =&gt; setIsAtTop(window.scrollY &lt; 78));
+  window.<span class="fn">addEventListener</span>(<span class="st">"scroll"</span>, onScroll, { passive: <span class="kw">true</span> });
+  <span class="kw">return</span> () =&gt; window.<span class="fn">removeEventListener</span>(<span class="st">"scroll"</span>, onScroll);
+}, [scroll]);
+
+<span class="cm">// NOTE: today HeaderMain engages react-headroom UNCONDITIONALLY (pin/hide on scroll).</span>
+<span class="cm">// Making it a per-theme choice — only "hide" pins, others disable the library — CHANGES</span>
+<span class="cm">// today's default, so this part is not purely additive. Call it out when migrating.</span>
+<span class="kw">const</span> headroomProps = scroll === <span class="st">"hide"</span>
+  ? { pinStart: 78, upTolerance: 5, downTolerance: 10 }
+  : { disable: <span class="kw">true</span> };
+
+<span class="cm">// "fade" cross-fade opacity — matches the real at-rest condition (incl. menu state)</span>
+<span class="kw">const</span> atRest = isAtTop &amp;&amp; !isHovered &amp;&amp; !isMenuOpen &amp;&amp; !isSwitching;
+<span class="kw">const</span> solidOpacity = scroll === <span class="st">"fade"</span> ? (atRest ? 0 : 1) : 1;
+
+<span class="kw">return</span> (
+  &lt;Headroom {...headroomProps}&gt;
+    &lt;header
+      className=<span class="st">"headerMain"</span>
+      data-hover={hover}
+      data-scroll={scroll}
+      data-shrink={scroll === <span class="st">"shrink"</span> &amp;&amp; !isAtTop ? <span class="st">"true"</span> : <span class="kw">undefined</span>}
+    &gt;
+      {<span class="cm">/* real HeaderMain stacks TWO .gradientOverlay divs (solid + gradient) that cross-fade */</span>}
+      {scroll === <span class="st">"fade"</span> &amp;&amp; (
+        &lt;div className=<span class="st">"gradientOverlay"</span> style={{ opacity: solidOpacity }} /&gt;
+      )}
+      {<span class="cm">/* ...nav... */</span>}
+    &lt;/header&gt;
+  &lt;/Headroom&gt;
+);</code></pre>
+      </div>
+      <div class="warn"><b>Not purely additive:</b> today's header <em>always</em> engages <code>react-headroom</code>
+        (hide/pin on scroll) and does the transparent→solid effect with overlay opacity. Turning scroll behaviour into
+        a per-theme choice changes that default for tenants that pick <code>"fade"</code>/<code>"solid"</code> — flag
+        it as a deliberate behaviour change during migration, not a silent addition.</div>
+      <div class="code">
+        <div class="label"><span>headerMain.css — shrink handled declaratively</span><span class="lang">css</span></div>
+<pre><code>.headerMain{ height: var(--glue-header-height); transition: height .3s ease; }
+.headerMain[data-shrink=<span class="st">"true"</span>]{ height: calc(var(--glue-header-height) - 22px); }
+.headerMain[data-scroll=<span class="st">"solid"</span>]{ background: rgb(var(--glue-color-bg)); } <span class="cm">/* no gradient */</span></code></pre>
+      </div>
+      <div class="ok"><b>Principle:</b> behaviour is a <em>closed set of flags</em>, not arbitrary per-tenant logic.
+        Every branch lives in the shared component and is covered by a story/test. A tenant chooses a behaviour; it
+        never ships behaviour code.</div>
+    </section>
+
+    <!-- ===================== 6 WORKED EXAMPLE ===================== -->
+    <section id="header">
+      <h2><span class="n">6</span>Worked example: two headers, one component</h2>
+      <p class="lead">Putting Layers 1–3 together — the same <code>HeaderMain</code>, two tenants, driven entirely by
+        data in their theme records:</p>
+      <div class="cmp">
+        <div class="t a">
+          <h4>Tenant A theme record</h4>
+          <div class="code" style="margin:0"><div class="label"><span>theme.json</span><span class="lang">json</span></div>
+<pre><code>{
+  <span class="st">"tokens"</span>: {
+    <span class="st">"color-bg"</span>: <span class="st">"10 10 10"</span>,
+    <span class="st">"color-accent"</span>: <span class="st">"249 111 45"</span>,
+    <span class="st">"header-radius"</span>: <span class="st">"0px"</span>
+  },
+  <span class="st">"variants"</span>:  { <span class="st">"header"</span>: { <span class="st">"shape"</span>: <span class="st">"flat"</span> } },
+  <span class="st">"behaviour"</span>: { <span class="st">"header"</span>: {
+     <span class="st">"hover"</span>: <span class="st">"underline"</span>, <span class="st">"scroll"</span>: <span class="st">"fade"</span> } }
+}</code></pre></div>
+        </div>
+        <div class="t b">
+          <h4>Tenant B theme record</h4>
+          <div class="code" style="margin:0"><div class="label"><span>theme.json</span><span class="lang">json</span></div>
+<pre><code>{
+  <span class="st">"tokens"</span>: {
+    <span class="st">"color-bg"</span>: <span class="st">"255 255 255"</span>,
+    <span class="st">"color-accent"</span>: <span class="st">"14 165 165"</span>,
+    <span class="st">"header-radius"</span>: <span class="st">"16px"</span>
+  },
+  <span class="st">"variants"</span>:  { <span class="st">"header"</span>: { <span class="st">"shape"</span>: <span class="st">"pill"</span> } },
+  <span class="st">"behaviour"</span>: { <span class="st">"header"</span>: {
+     <span class="st">"hover"</span>: <span class="st">"fill"</span>, <span class="st">"scroll"</span>: <span class="st">"solid"</span> } }
+}</code></pre></div>
+        </div>
+      </div>
+      <p><b>Result:</b> Tenant A = dark, square nav, animated orange underline, transparent header that solidifies on
+        scroll. Tenant B = light, rounded pill nav, teal fill-on-hover, always-solid header. No component was forked;
+        no per-tenant code was written.</p>
+    </section>
+
+    <!-- ===================== 7 WHERE STYLES LIVE ===================== -->
+    <section id="styles">
+      <h2><span class="n">7</span>Where tenant-specific styles live in the code</h2>
+      <p class="lead">Three homes, by intent — most theming is data, a little is a scoped escape hatch, and code is a
+        last resort.</p>
+      <div class="tablewrap"><table>
+        <thead><tr><th>What</th><th>Lives in</th><th>Edited by</th></tr></thead>
+        <tbody>
+          <tr><td>Token values, variant picks, behaviour flags, fonts, logo, favicon</td><td>The <code>themes</code> collection (one record per tenant), referenced by the tenant</td><td>Theme editor UI (Phase 6) — no deploy</td></tr>
+          <tr><td>The token <em>contract</em> &amp; default theme</td><td><code>glue-components/theme/</code> (<code>tokens.css</code>, <code>types.ts</code>)</td><td>Component team (code)</td></tr>
+          <tr><td>Bespoke one-off tweaks for a single tenant (Layer 4)</td><td>A scoped CSS string on the theme record, injected after tokens</td><td>Theme editor / component team</td></tr>
+          <tr><td>A genuinely unique component (Layer 5)</td><td>The shared library, gated by <code>component_registry</code> visibility</td><td>Component team (code) + registry row</td></tr>
+        </tbody>
+      </table></div>
+
+      <div class="code">
+        <div class="label"><span>themes collection — shape of one record</span><span class="lang">ts</span></div>
+<pre><code>{
+  _id, tenantId: <span class="st">"acme"</span>, name: <span class="st">"acme-dark"</span>, version: 3, status: <span class="st">"published"</span>,
+  tokens:     { <span class="st">"color-bg"</span>: <span class="st">"10 10 10"</span>, <span class="st">"color-accent"</span>: <span class="st">"249 111 45"</span>, ... },
+  variants:   { header: { shape: <span class="st">"flat"</span> }, card: { shape: <span class="st">"rounded"</span> } },
+  behaviour:  { header: { hover: <span class="st">"underline"</span>, scroll: <span class="st">"fade"</span> } },
+  fonts:      { sans: <span class="st">"Inter"</span>, link: <span class="st">"https://fonts.googleapis.com/..."</span> },
+  assets:     { logoDark, logoLight, favicon },
+  cssOverride:<span class="st">".headerMain .navItem{ letter-spacing:.04em; }"</span>  <span class="cm">// Layer 4, optional</span>
+}</code></pre>
+      </div>
+
+      <p>The Layer-4 override is injected <b>after</b> the tokens and scoped so it can only affect this tenant's site
+        (and, in the composer's preview, only the previewed tenant):</p>
+      <div class="code">
+        <div class="label"><span>layout.tsx — scoped override, tokens first then override</span><span class="lang">tsx</span></div>
+<pre><code>&lt;style id=<span class="st">"glue-theme"</span> dangerouslySetInnerHTML={{ __html: <span class="fn">themeToCssVars</span>(theme.tokens) }} /&gt;
+{theme.cssOverride &amp;&amp; (
+  &lt;style id=<span class="st">"glue-tenant-override"</span>
+    dangerouslySetInnerHTML={{ __html: <span class="st">`[data-tenant="${tenant.slug}"]{ ${theme.cssOverride} }`</span> }} /&gt;
+)}</code></pre>
+      </div>
+      <div class="note"><b>Deploy-per-tenant bonus:</b> because each tenant is its own build, only <em>that</em> tenant's
+        override ships to <em>that</em> site. In the composer (one app, many tenants) the <code>[data-tenant]</code>
+        scope keeps a preview of Tenant A from leaking Tenant B's overrides.</div>
+    </section>
+
+    <!-- ===================== 8 DIFFERENT LOOK ===================== -->
+    <section id="different">
+      <h2><span class="n">8</span>Keeping a completely different look &amp; feel per tenant</h2>
+      <p class="lead">"Completely different" is the sum of the layers plus a few whole-site levers. A tenant's identity =
+        <b>tokens + variants + behaviour + fonts/logo + (optional) overrides</b>. In practice that is enough for sites
+        that look nothing alike while sharing 100% of the component code.</p>
+      <ul>
+        <li><b>Palette &amp; type</b> (tokens): different colours; fonts loaded per tenant — via <code>next/font</code> when the family is fixed at <em>build</em> time (fine under deploy-per-tenant), or a runtime <code>&lt;link&gt;</code>/<code>@import</code> from the theme record when it must be data-driven.</li>
+        <li><b>Shape language</b> (tokens + variants): radius scale, nav/card shapes, density.</li>
+        <li><b>Motion &amp; interaction</b> (behaviour): hover, scroll, reduced-motion.</li>
+        <li><b>Brand assets</b> (theme record): logo (light/dark), favicon, OG image.</li>
+        <li><b>Structure</b> (optional): a tenant can prefer different <em>templates</em> (you already have Two-Column, Left-Sticky, Right-Sticky) and a different default component set via the registry.</li>
+        <li><b>Bespoke polish</b> (Layer 4): the scoped CSS override for the last 5%.</li>
+      </ul>
+      <div class="warn"><b>Where to draw the line.</b> If two tenants need <em>structurally</em> different headers that
+        no variant can express, that's a signal to add a new <em>variant</em> to the shared component — not to fork
+        <code>HeaderMain</code> into <code>HeaderMainAcme</code>. Forks multiply maintenance across every future change
+        and are the fastest way to the "mess" you want to avoid.</div>
+    </section>
+
+    <!-- ===================== 9 SCALE ===================== -->
+    <section id="scale">
+      <h2><span class="n">9</span>Managing a large library — all components, all tenants, one app</h2>
+      <p class="lead">One shared library serves every tenant. Scale is managed by <b>organisation + contracts + tests</b>,
+        and by preferring <em>variants over forks</em> so the component count grows with genuine capability, not with
+        tenant count.</p>
+
+      <h3>9.1 Co-located, self-describing components</h3>
+      <p>Replace the single 11.8k-line <code>cms/schema.json</code> with a manifest beside each component; a build step
+        aggregates them. Each manifest carries the metadata that keeps a big catalogue navigable.</p>
+      <div class="code">
+        <div class="label"><span>components/header-main/HeaderMain.manifest.ts</span><span class="lang">ts</span></div>
+<pre><code><span class="kw">export default</span> {
+  name: <span class="st">"HeaderMain"</span>,                 <span class="cm">// must equal the index.ts export key</span>
+  category: <span class="st">"Navigation"</span>,             <span class="cm">// powers grouped, searchable palette</span>
+  tags: [<span class="st">"header"</span>, <span class="st">"menu"</span>, <span class="st">"nav"</span>],
+  status: <span class="st">"active"</span>,                    <span class="cm">// active | beta | deprecated</span>
+  variants: { shape: [<span class="st">"flat"</span>, <span class="st">"boxed"</span>, <span class="st">"pill"</span>] },   <span class="cm">// declared for Storybook + validation</span>
+  defaultVisibility: <span class="st">"global"</span>,        <span class="cm">// global | tenant-list | tenant-specific</span>
+  schema: { <span class="cm">/* existing rjsf JSON Schema of props */</span> },
+} <span class="kw">satisfies</span> ComponentManifest;</code></pre>
+      </div>
+
+      <h3>9.2 Tenant scoping is metadata, not code</h3>
+      <p>A "tenant-specific component" is a normal component whose <code>component_registry</code> row limits which
+        tenants see it in the palette. The renderer is unaffected; visibility gates <em>insertion</em>, not runtime.
+        This is how you avoid per-tenant code branches. (Detail in <a href="index.html">index.html</a> Phases 5–6.)</p>
+
+      <h3>9.3 Guardrails that keep it tidy as it grows</h3>
+      <ul>
+        <li><b>No hardcoded colours</b> — a lint rule fails the build on raw hex in component source, forcing token use.</li>
+        <li><b>Naming lint</b> — folder ↔ PascalCase ↔ manifest <code>name</code> must agree; names unique; category from an allowed set.</li>
+        <li><b>Variants &gt; forks</b> — add a variant to an existing component before creating a new one; PR review enforces this.</li>
+        <li><b>Deprecation, not deletion</b> — <code>status:"deprecated"</code> hides a component from new inserts but keeps existing pages rendering.</li>
+        <li><b>Tree-shaking</b> — named exports + <code>sideEffects</code> so a tenant's build only bundles the components it uses.</li>
+      </ul>
+
+      <div class="code">
+        <div class="label"><span>.eslintrc — ban hardcoded colours in component source</span><span class="lang">js</span></div>
+<pre><code>rules: {
+  <span class="st">"no-restricted-syntax"</span>: [<span class="st">"error"</span>, {
+    selector: <span class="st">"Literal[value=/#(?:[0-9a-fA-F]{3}){1,2}\\b/]"</span>,
+    message:  <span class="st">"Use a --glue-* token (or a Tailwind token class), not a hardcoded hex."</span>
+  }]
+}</code></pre>
+      </div>
+
+      <h3>9.4 Testing across the theme matrix</h3>
+      <ul>
+        <li><b>Storybook theme switcher</b> — a global decorator injects a chosen theme's tokens so every story is viewable under each tenant theme.</li>
+        <li><b>Visual regression</b> (Chromatic / Playwright screenshots) over <em>component × theme × variant</em> catches a token change that breaks one tenant.</li>
+        <li><b>Contrast checks</b> — assert each theme's paired <code>fg/bg</code> tokens meet WCAG contrast, so a new palette can't ship unreadable text.</li>
+      </ul>
+      <div class="code">
+        <div class="label"><span>.storybook/preview.tsx — theme decorator</span><span class="lang">tsx</span></div>
+<pre><code><span class="kw">export const</span> globalTypes = { theme: { toolbar: { items: [<span class="st">"clouda"</span>, <span class="st">"acme"</span>, <span class="st">"lumen"</span>] } } };
+
+<span class="kw">export const</span> decorators = [(Story, ctx) =&gt; {
+  <span class="fn">applyThemeVars</span>(THEMES[ctx.globals.theme]);   <span class="cm">// sets --glue-* on the preview root</span>
+  <span class="kw">return</span> &lt;ThemeProvider value={THEMES[ctx.globals.theme]}&gt;&lt;Story /&gt;&lt;/ThemeProvider&gt;;
+}];</code></pre>
+      </div>
+    </section>
+
+    <!-- ===================== 10 CONCERNS ===================== -->
+    <section id="concerns">
+      <h2><span class="n">10</span>Other major concerns to address</h2>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Concern</th><th>How it's handled</th></tr></thead>
+        <tbody>
+          <tr><td><b>FOUC</b> (flash of wrong theme)</td><td>Tokens rendered server-side in <code>&lt;head&gt;</code>; no client theme swap on load.</td></tr>
+          <tr><td><b>Precedence</b></td><td>Fixed order: tenant theme (<code>:root</code>) &lt; page override (wrapper vars) &lt; block override (props). Tokens sit <em>below</em> existing colour props, so old pages keep working.</td></tr>
+          <tr><td><b>Light/dark within a theme</b></td><td>Paired <code>*-fg</code> tokens; never infer contrast from a hex (retire <code>isLightTheame</code> / <code>AutoSwapColor</code>).</td></tr>
+          <tr><td><b>Accessibility</b></td><td>Contrast asserted per theme in CI; focus states use tokens; honour <code>prefers-reduced-motion</code> alongside the behaviour flag.</td></tr>
+          <tr><td><b>CSS class collisions</b></td><td>Global class names are a growing risk; migrate per-component CSS to CSS Modules (or a build-time prefix). Leave third-party selectors (<code>.headroom*</code>, slick) alone.</td></tr>
+          <tr><td><b>Bundle size</b></td><td>One library, tree-shaken via named exports; deploy-per-tenant ships only that tenant's overrides; fonts loaded per tenant.</td></tr>
+          <tr><td><b>Versioning &amp; blast radius</b></td><td>One package version affects all tenants — so change via <em>additive</em> variants/flags, not breaking edits; validate with the theme matrix; roll out to a canary tenant first.</td></tr>
+          <tr><td><b>Performance</b></td><td>CSS variables are essentially free; behaviour flags avoid layout thrash (transform/opacity, not width/height where possible); scroll work stays in <code>requestAnimationFrame</code> as today.</td></tr>
+          <tr><td><b>Governance</b></td><td>Theme editor with live preview (Phase 6); token completeness validated on save so a theme can't ship missing a required token.</td></tr>
+          <tr><td><b>Migration risk</b></td><td>Tokens are an <em>additive fallback</em> (<code>prop ?? var(--token)</code>); components migrate in waves; publish between waves; nothing big-bang.</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <!-- ===================== ROLLOUT ===================== -->
+    <section id="rollout">
+      <h2>Step-by-step rollout</h2>
+      <ol>
+        <li><b>Land the token contract</b> — <code>tokens.css</code> + <code>types.ts</code> + Tailwind mapping. Defaults = current brand ⇒ zero visual change. <span style="color:var(--muted)">(Plan Phase 2)</span></li>
+        <li><b>Server-inject tokens</b> in <code>layout.tsx</code> from a default theme; verify the render is byte-identical.</li>
+        <li><b>Add the <code>ThemeProvider</code></b> + <code>useTheme()</code> and the variant/behaviour contracts (empty/default to start).</li>
+        <li><b>Migrate shared chrome first</b> — <code>HeaderMain</code>, <code>Footer</code>, <code>Title</code>: tokens for colour/shape, then the hover/scroll behaviour flags. Retire <code>isLightTheame</code>/<code>AutoSwapColor</code> here.</li>
+        <li><b>Migrate high-use components</b> in waves (cards, CTAs), then the long tail. <span style="color:var(--muted)">(Plan Phase 7)</span></li>
+        <li><b>Add CSS Modules + the no-hardcoded-colour lint</b> alongside the waves.</li>
+        <li><b>Stand up the theme matrix</b> — Storybook switcher + visual regression + contrast checks.</li>
+        <li><b>Build the theme editor</b> with live preview and the Layer-4 override field. <span style="color:var(--muted)">(Plan Phase 6)</span></li>
+        <li><b>Onboard the second tenant's theme</b> — a record of tokens/variants/behaviour/assets; confirm two visibly different sites from one library.</li>
+      </ol>
+      <div class="ok"><b>Net effect:</b> a new tenant's entire look is a <em>data record</em> plus, occasionally, a small
+        scoped CSS override — no component forks, no per-tenant code branches, and a library that grows with real
+        capability rather than with the number of tenants.</div>
+    </section>
+
+    <div class="footer">
+      Clouda Glue Solutions · Per-Tenant Theming — Architecture &amp; Code · Companion to the multi-tenancy plan
+      (<a href="index.html">index.html</a>, <a href="overview.html">overview.html</a>, plan.md). Proposed — awaiting approval.
+    </div>
+  </main>
+</div>
+</body>
+</html>

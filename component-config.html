@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Component Configuration · Multi-Tenancy Documentation · Clouda Glue</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="sb">
+    <div class="sb-brand"><span class="logo"></span>Clouda <span>Glue</span></div>
+    <div class="sb-sub">Multi-Tenancy Documentation</div>
+    <div class="sb-group">Getting started</div>
+    <a href="index.html">Overview</a>
+    <div class="sb-group">Architecture</div>
+    <a href="content-management.html"><span class="num">1</span> Content Management</a>
+    <a href="data-model.html"><span class="num">2</span> Data Model &amp; Isolation</a>
+    <a href="deployment.html"><span class="num">3</span> Deployment</a>
+    <a href="theming.html"><span class="num">4</span> Theming</a>
+    <a href="shared-packages.html"><span class="num">5</span> Shared Packages</a>
+    <a href="component-config.html" class="active"><span class="num">6</span> Component Configuration</a>
+    <div class="sb-group">Delivery</div>
+    <a href="roadmap.html"><span class="num">7</span> Roadmap &amp; Risks</a>
+  </nav>
+
+  <main class="content">
+    <div class="crumbs"><a href="index.html">Overview</a> &rsaquo; <b>Component Configuration</b></div>
+    <span class="eyebrow">Architecture · Component configuration</span>
+    <h1>Component configuration, per component and per tenant</h1>
+    <p class="lead">Break the single ~11.8k-line <code>sections.json</code> into small <code>*.section.json</code>
+      files that live next to each component, add a tenant slug field, and combine them at build into exactly the
+      shape the composer already consumes — so nothing downstream breaks and each tenant sees only the components it
+      should.</p>
+    <div class="status">Proposed — awaiting approval. Nothing implemented yet.</div>
+
+    <h2>Today: one giant sections.json</h2>
+    <p>A single configuration file — around <b>11,800 lines</b> — lists all of the roughly <b>64 components</b> as a
+      flat array of <code>{ name, schema }</code> entries. The composer palette in
+      <code>sectionRenderer.tsx</code> reads that file flat and renders every entry to every user.</p>
+    <div class="grid c3">
+      <div class="card"><h4>Hard to maintain</h4><p style="margin:2px 0 0">Every component change edits one enormous shared file — merge conflicts, no ownership, easy to break unrelated entries.</p></div>
+      <div class="card"><h4>No categorisation</h4><p style="margin:2px 0 0">A flat array: no categories, tags, or status. The palette can only show one long undifferentiated list.</p></div>
+      <div class="card"><h4>Identical for every tenant</h4><p style="margin:2px 0 0">There is no tenant field, so every tenant is offered the exact same set of components — no way to enable or restrict.</p></div>
+    </div>
+    <div class="code"><div class="label"><span>glue-components/cms/schema.json (today, abridged) — imported by the composer via @clouda-inc/glue-components/dist/cms/schema.json</span><span class="lang">json</span></div><pre><code><span class="c-cm">// a bare, top-level ARRAY — the composer does (schemas as any[]).find(s =&gt; s.name === …)</span>
+[
+  { <span class="c-at">"name"</span>: <span class="c-st">"HeaderMain"</span>, <span class="c-at">"schema"</span>: { <span class="c-cm">/* … */</span> } },
+  { <span class="c-at">"name"</span>: <span class="c-st">"HeroBanner"</span>, <span class="c-at">"schema"</span>: { <span class="c-cm">/* … */</span> } }
+  <span class="c-cm">/* … ~64 entries, ~11.8k lines, no category / tenant … */</span>
+]</code></pre></div>
+
+    <h2>Per-component config files</h2>
+    <p>Replace the monolith with a small config <b>co-located with each component</b>: a
+      <code>ComponentName.section.json</code> that sits beside its <code>.tsx</code>. Ownership moves to the
+      component, diffs stay local, and each file can carry richer metadata: <code>category</code>, <code>tags</code>,
+      <code>status</code>, and a <code>tenants</code>/<code>visibility</code> field.</p>
+    <div class="code"><div class="label"><span>packages/components/src/header-main/HeaderMain.section.json</span><span class="lang">json</span></div><pre><code>{
+  <span class="c-at">"name"</span>: <span class="c-st">"HeaderMain"</span>,
+  <span class="c-at">"category"</span>: <span class="c-st">"navigation"</span>,
+  <span class="c-at">"tags"</span>: [<span class="c-st">"header"</span>, <span class="c-st">"nav"</span>, <span class="c-st">"sticky"</span>],
+  <span class="c-at">"status"</span>: <span class="c-st">"stable"</span>,
+  <span class="c-at">"visibility"</span>: <span class="c-st">"global"</span>,          <span class="c-cm">// "global" | ["acme","brandb"] | "acme"</span>
+  <span class="c-at">"schema"</span>: {
+    <span class="c-at">"logoUrl"</span>: { <span class="c-at">"type"</span>: <span class="c-st">"string"</span>, <span class="c-at">"label"</span>: <span class="c-st">"Logo URL"</span> },
+    <span class="c-at">"sticky"</span>:  { <span class="c-at">"type"</span>: <span class="c-st">"boolean"</span>, <span class="c-at">"default"</span>: <span class="c-kw">true</span> }
+  }
+}</code></pre></div>
+    <div class="tip"><b>Naming is the contract.</b> The file basename (<code>HeaderMain</code>) must equal the
+      <code>name</code> field and match its folder — validation enforces this so the build and the composer never
+      disagree about what a component is called.</div>
+
+    <h2>Combine at build</h2>
+    <p>A build step globs every <code>*.section.json</code>, validates them, and combines them into a single
+      <code>sections.json</code> that keeps the <b>exact shape the composer already consumes</b> — so
+      <code>sectionRenderer.tsx</code> needs no change to keep working. Alongside it, the step emits a richer
+      <code>manifest.json</code> carrying the metadata (category, tags, status, visibility) the new palette uses.
+      Wire the script into the existing Rollup build so it runs on every package build.</p>
+
+    <div class="diagram">
+      <svg viewBox="0 0 1080 300" role="img" aria-label="Many per-component section.json files feed a build aggregate step, which emits one sections.json plus a manifest.json.">
+        <defs>
+          <marker id="arw" markerWidth="11" markerHeight="11" refX="7.5" refY="3.4" orient="auto"><path d="M0,0 L8.4,3.4 L0,6.8 Z" fill="#f96f2d"></path></marker>
+          <style>
+            .bx{fill:#fff;stroke:#dfe4ec;stroke-width:1.5}
+            .hd{font:700 15px var(--sans,sans-serif);fill:#171a21}
+            .hdw{font:700 15px var(--sans,sans-serif);fill:#fff}
+            .sub{font:12.5px var(--sans,sans-serif);fill:#5c6673}
+            .lbl{font:600 12px var(--sans,sans-serif);fill:#8a94a2}
+            .flow{stroke:#f96f2d;stroke-width:2.4;fill:none}
+          </style>
+        </defs>
+
+        <!-- source files -->
+        <rect class="bx" x="30" y="42" width="250" height="52" rx="11"></rect>
+        <text class="sub" x="155" y="73" text-anchor="middle">HeaderMain.section.json</text>
+        <rect class="bx" x="30" y="124" width="250" height="52" rx="11"></rect>
+        <text class="sub" x="155" y="155" text-anchor="middle">HeroBanner.section.json</text>
+        <rect class="bx" x="30" y="206" width="250" height="52" rx="11"></rect>
+        <text class="sub" x="155" y="237" text-anchor="middle">…64 × *.section.json</text>
+
+        <!-- aggregate -->
+        <rect x="420" y="108" width="240" height="86" rx="14" fill="#fff7f2" stroke="#ffcdb1" stroke-width="1.6"></rect>
+        <path d="M434,108 h212 a14,14 0 0 1 14,14 v18 h-240 v-18 a14,14 0 0 1 14,-14 z" fill="#f96f2d"></path>
+        <text class="hdw" x="540" y="132" text-anchor="middle">build / aggregate</text>
+        <text class="sub" x="540" y="166" text-anchor="middle">glob → validate → write</text>
+        <text class="sub" x="540" y="185" text-anchor="middle">runs in Rollup build</text>
+
+        <!-- outputs -->
+        <rect class="bx" x="800" y="82" width="250" height="56" rx="11"></rect>
+        <text class="hd" x="925" y="108" text-anchor="middle">sections.json</text>
+        <text class="sub" x="925" y="127" text-anchor="middle">same shape composer consumes</text>
+        <rect class="bx" x="800" y="164" width="250" height="56" rx="11"></rect>
+        <text class="hd" x="925" y="190" text-anchor="middle">manifest.json</text>
+        <text class="sub" x="925" y="209" text-anchor="middle">category · tags · visibility</text>
+
+        <!-- flows -->
+        <path class="flow" d="M280,68 C350,84 372,120 418,140" marker-end="url(#arw)"></path>
+        <path class="flow" d="M280,150 L416,150" marker-end="url(#arw)"></path>
+        <path class="flow" d="M280,232 C350,216 372,178 418,158" marker-end="url(#arw)"></path>
+        <path class="flow" d="M660,140 C720,124 748,116 796,110" marker-end="url(#arw)"></path>
+        <path class="flow" d="M660,162 C720,178 748,186 796,192" marker-end="url(#arw)"></path>
+        <text class="lbl" x="730" y="102" text-anchor="middle">emit</text>
+      </svg>
+      <div class="cap">Many co-located <code>*.section.json</code> files → one aggregate step → <code>sections.json</code> (unchanged shape) + <code>manifest.json</code> (metadata).</div>
+    </div>
+
+    <div class="code"><div class="label"><span>packages/components/build/aggregate-sections.js</span><span class="lang">js</span></div><pre><code><span class="c-kw">import</span> { globSync } <span class="c-kw">from</span> <span class="c-st">"glob"</span>;
+<span class="c-kw">import</span> { readFileSync, writeFileSync } <span class="c-kw">from</span> <span class="c-st">"node:fs"</span>;
+
+<span class="c-kw">const</span> files = globSync(<span class="c-st">"src/**/*.section.json"</span>);
+<span class="c-kw">const</span> seen = <span class="c-kw">new</span> <span class="c-fn">Map</span>();
+<span class="c-kw">const</span> sections = [];   <span class="c-cm">// composer shape: { name, schema }</span>
+<span class="c-kw">const</span> manifest = [];   <span class="c-cm">// rich metadata</span>
+
+<span class="c-kw">for</span> (<span class="c-kw">const</span> file <span class="c-kw">of</span> files) {
+  <span class="c-kw">const</span> cfg = <span class="c-fn">JSON</span>.parse(<span class="c-fn">readFileSync</span>(file, <span class="c-st">"utf8"</span>));
+
+  <span class="c-cm">// validate name uniqueness</span>
+  <span class="c-kw">if</span> (seen.has(cfg.name)) {
+    <span class="c-kw">throw</span> <span class="c-kw">new</span> <span class="c-fn">Error</span>(<span class="c-st">`Duplicate component name "</span>${cfg.name}<span class="c-st">" in </span>${file}<span class="c-st">`</span>);
+  }
+  seen.set(cfg.name, file);
+
+  sections.push({ name: cfg.name, schema: cfg.schema });
+  manifest.push({
+    name: cfg.name,
+    category: cfg.category ?? <span class="c-st">"uncategorised"</span>,
+    tags: cfg.tags ?? [],
+    status: cfg.status ?? <span class="c-st">"stable"</span>,
+    visibility: cfg.visibility ?? <span class="c-st">"global"</span>,   <span class="c-cm">// safe default</span>
+  });
+}
+
+<span class="c-cm">// bare array — byte/shape-compatible with what sectionRenderer.tsx's (schemas as any[]).find(...) expects</span>
+<span class="c-fn">writeFileSync</span>(<span class="c-st">"dist/sections.json"</span>, <span class="c-fn">JSON</span>.stringify(sections, <span class="c-kw">null</span>, <span class="c-nm">2</span>));
+<span class="c-cm">// the new manifest is our own artifact — an object wrapper is fine (read as manifest.manifest below)</span>
+<span class="c-fn">writeFileSync</span>(<span class="c-st">"dist/manifest.json"</span>, <span class="c-fn">JSON</span>.stringify({ manifest }, <span class="c-kw">null</span>, <span class="c-nm">2</span>));</code></pre></div>
+
+    <h2>Tenant slug field: enable/restrict per tenant</h2>
+    <p>Each <code>*.section.json</code> (or, later, a <code>component_registry</code> row) carries a
+      <code>visibility</code> field with one of three shapes:</p>
+    <div class="grid c3">
+      <div class="card"><h4>Global</h4><p style="margin:2px 0 0"><code>"global"</code> — offered to every tenant. This is also the default when the field is missing.</p></div>
+      <div class="card"><h4>List of slugs</h4><p style="margin:2px 0 0"><code>["acme","brandb"]</code> — offered only to the listed tenant slugs.</p></div>
+      <div class="card"><h4>Single tenant</h4><p style="margin:2px 0 0"><code>"acme"</code> — offered to exactly one tenant slug.</p></div>
+    </div>
+    <div class="note"><b>Missing means global.</b> A component with no <code>visibility</code> is treated as
+      <code>"global"</code>, so existing components keep appearing for everyone — the safe default preserves
+      today's behaviour exactly.</div>
+    <div class="tip"><b>Not a code fork.</b> A "tenant-specific component" is a normal <i>shared</i> component whose
+      visibility is limited to one or more slugs. There is only one codebase; visibility just filters which slugs may
+      pick it in the palette.</div>
+    <p>The composer filters the palette for the <b>active tenant</b> using this rule:</p>
+    <div class="code"><div class="label"><span>glue-composer/src/lib/getVisibleComponents.ts</span><span class="lang">ts</span></div><pre><code><span class="c-kw">import</span> manifest <span class="c-kw">from</span> <span class="c-st">"@clouda-inc/glue-components/manifest.json"</span>;
+
+<span class="c-kw">type</span> Visibility = <span class="c-st">"global"</span> | <span class="c-st">"string"</span> | <span class="c-st">"string"</span>[];
+
+<span class="c-kw">export function</span> <span class="c-fn">getVisibleComponents</span>(tenantSlug: <span class="c-st">"string"</span>) {
+  <span class="c-kw">return</span> manifest.manifest.filter((c) =&gt; {
+    <span class="c-kw">const</span> v: Visibility = c.visibility ?? <span class="c-st">"global"</span>;   <span class="c-cm">// missing =&gt; global</span>
+    <span class="c-kw">if</span> (v === <span class="c-st">"global"</span>) <span class="c-kw">return</span> <span class="c-kw">true</span>;
+    <span class="c-kw">if</span> (<span class="c-fn">Array</span>.isArray(v)) <span class="c-kw">return</span> v.includes(tenantSlug);
+    <span class="c-kw">return</span> v === tenantSlug;                          <span class="c-cm">// single slug</span>
+  });
+}</code></pre></div>
+
+    <h2>Validation</h2>
+    <p>A lint / CI step guards the whole pipeline so a bad config fails the build rather than the composer at runtime:</p>
+    <ul>
+      <li><b>Unique names</b> — no two <code>*.section.json</code> files may declare the same <code>name</code>.</li>
+      <li><b>Folder ↔ name agreement</b> — the file basename and its parent folder must match the <code>name</code>.</li>
+      <li><b>Allowed categories</b> — <code>category</code> must be one of a known enum (e.g. navigation, hero, content, media, form, footer).</li>
+      <li><b>Byte-compatible output</b> — the generated <code>sections.json</code> must stay structurally compatible with what <code>sectionRenderer.tsx</code> expects, so nothing downstream breaks.</li>
+    </ul>
+    <div class="ok"><b>Fail fast.</b> Running validation in CI means a duplicate name, a mismatched folder, or an
+      unknown category is caught in the pull request — never after deploy.</div>
+
+    <h2>Files touched</h2>
+    <div class="tablewrap">
+      <table>
+        <tr><th>File / path</th><th>Change</th><th>Phase</th></tr>
+        <tr><td><span class="pick">components/**/*.section.json</span></td><td>New co-located config per component (name, schema, category, tags, status, visibility)</td><td><span class="badge mvp">MVP</span></td></tr>
+        <tr><td><span class="pick">build/aggregate-sections.js</span></td><td>New glob → validate → write step producing <code>sections.json</code> + <code>manifest.json</code></td><td><span class="badge mvp">MVP</span></td></tr>
+        <tr><td><span class="pick">rollup.config.*</span></td><td>Wire the aggregate script into the existing package build</td><td><span class="badge mvp">MVP</span></td></tr>
+        <tr><td><span class="pick">composer sectionRenderer.tsx</span></td><td>Palette reads the manifest and filters via <code>getVisibleComponents(tenantSlug)</code></td><td><span class="badge mvp">MVP</span></td></tr>
+        <tr><td><span class="pick">component_registry</span> collection</td><td>Optional DB-backed registry for visibility managed in the UI instead of files</td><td><span class="badge later">Later</span></td></tr>
+      </table>
+    </div>
+
+    <div class="pagenav"><a class="prev" href="shared-packages.html"><div class="dir">&larr; Prev</div><div class="ttl">5 &middot; Shared Packages</div></a><a class="next" href="roadmap.html"><div class="dir">Next &rarr;</div><div class="ttl">7 &middot; Roadmap &amp; Risks</div></a></div>
+    <div class="footer">Clouda Glue Solutions &middot; Multi-Tenancy Documentation &middot; Proposed &mdash; awaiting approval.</div>
+  </main>
+</div>
+</body>
+</html>

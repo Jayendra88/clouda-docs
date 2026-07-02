@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Roadmap &amp; Risks · Multi-Tenancy Documentation · Clouda Glue</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="layout">
+  <nav class="sb">
+    <div class="sb-brand"><span class="logo"></span>Clouda <span>Glue</span></div>
+    <div class="sb-sub">Multi-Tenancy Documentation</div>
+    <div class="sb-group">Getting started</div>
+    <a href="index.html">Overview</a>
+    <div class="sb-group">Architecture</div>
+    <a href="content-management.html"><span class="num">1</span> Content Management</a>
+    <a href="data-model.html"><span class="num">2</span> Data Model &amp; Isolation</a>
+    <a href="deployment.html"><span class="num">3</span> Deployment</a>
+    <a href="theming.html"><span class="num">4</span> Theming</a>
+    <a href="shared-packages.html"><span class="num">5</span> Shared Packages</a>
+    <a href="component-config.html"><span class="num">6</span> Component Configuration</a>
+    <div class="sb-group">Delivery</div>
+    <a href="roadmap.html" class="active"><span class="num">7</span> Roadmap &amp; Risks</a>
+  </nav>
+
+  <main class="content">
+    <div class="crumbs"><a href="index.html">Overview</a> &rsaquo; <b>Roadmap &amp; Risks</b></div>
+    <span class="eyebrow">Proposal · Delivery plan</span>
+    <h1>Roadmap &amp; Risks</h1>
+    <p class="lead">The phased, MVP-first plan to reach multi-tenancy, the risks that come with it and how each
+      is mitigated, and the verification that proves every step is safe. The guiding constraint throughout:
+      <code>www.clouda.io</code> keeps behaving exactly as it does today.</p>
+    <div class="status">Proposed — awaiting approval. Nothing implemented yet.</div>
+
+    <div class="tip"><b>MVP first.</b> Phases 0–4 build the foundation and take one real second tenant fully live on
+      its own domain and theme. Phases 5–8 are the heavier admin, registry and hardening tooling — valuable, but
+      deferred until the platform is proven multi-tenant end-to-end.</div>
+
+    <h2>Phased rollout</h2>
+    <p>Each phase is additive and reversible, and none changes what visitors see on the existing site until we
+      intentionally cut over the second tenant. The MVP milestone is Phase 4.</p>
+
+    <ol class="steps">
+      <li>
+        <b>Data foundation &amp; shared packages <span class="badge mvp">MVP</span></b>
+        <span>Stand up <code>packages/db</code> and <code>packages/components</code> as workspaces, add the
+          tenant-scoping repository (<code>getTenantRepo</code>) that forces a <code>tenantId</code> on every read
+          and write, add <code>tenantId</code>-leading indexes, then run an additive, idempotent backfill that
+          stamps every existing document with the default tenant (<code>clouda</code>).</span>
+      </li>
+      <li>
+        <b>glue-main tenant resolution &amp; scoped reads <span class="badge mvp">MVP</span></b>
+        <span>Resolve the tenant from <code>TENANT_SLUG</code> at build/request time, route all content queries
+          (<code>getWebpageContentBySlug</code>, <code>getGlobalSection</code>, <code>getHomePage</code>) through the
+          scoped repository, and drive per-tenant config from the resolved slug.</span>
+      </li>
+      <li>
+        <b>Theming foundation <span class="badge mvp">MVP</span></b>
+        <span>Introduce the CSS-variable token layer and per-tenant theme files loaded by <code>TENANT_SLUG</code>,
+          with the existing brand values wired in as the <code>clouda</code> defaults so nothing shifts visually.</span>
+      </li>
+      <li>
+        <b>Composer: tenant context &amp; access control <span class="badge mvp">MVP</span></b>
+        <span>Add a tenant switcher and tenant context, make roles (<code>super-admin</code>/<code>admin</code>/<code>editor</code>/<code>viewer</code>)
+          per-tenant, scope every CRUD operation to the active tenant, add the Super User admin, and close the
+          currently unguarded API routes.</span>
+      </li>
+      <li>
+        <b>MVP milestone — onboard a real second tenant <span class="badge mvp">MVP</span></b>
+        <span>Deploy a second glue-main app on its own domain with its own <code>TENANT_SLUG</code> and theme,
+          author and publish its pages in the shared composer, and confirm ISR on-demand revalidation updates it
+          without a rebuild. This is the point at which the platform is genuinely multi-tenant.</span>
+      </li>
+      <li>
+        <b>Component configuration <span class="badge later">Later</span></b>
+        <span>Replace the monolithic schema with per-component <code>*.section.json</code> files aggregated at
+          build time, adding a tenant field so the editor palette can vary per tenant.</span>
+      </li>
+      <li>
+        <b>Component visibility &amp; editor tooling <span class="badge later">Later</span></b>
+        <span>Add a component-visibility admin, a searchable palette, and an in-composer theme editor so tenant
+          admins can self-serve without a developer.</span>
+      </li>
+      <li>
+        <b>Component theming waves <span class="badge later">Later</span></b>
+        <span>Migrate components off hardcoded colours and the <code>isLightTheame</code> flag onto theme tokens,
+          in reviewable waves, publishing between each so no tenant regresses.</span>
+      </li>
+      <li>
+        <b>Backup &amp; restore hardening <span class="badge later">Later</span></b>
+        <span>Make snapshot, backup and restore operations per-tenant and access-controlled, replacing the
+          current unscoped dump.</span>
+      </li>
+    </ol>
+
+    <h2>Risks &amp; mitigations</h2>
+    <p>Every risk below has an owned mitigation baked into the plan — most are structural (the code makes the
+      unsafe path impossible) rather than procedural.</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Risk</th><th>Impact</th><th>Mitigation</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="pick">Cross-tenant data leakage</td>
+            <td>One tenant reads or writes another tenant's pages.</td>
+            <td>Mandatory <code>getTenantRepo</code> that forces <code>tenantId</code> on every query; a lint/CI
+              gate blocking raw collection access; <code>tenantId</code>-leading indexes; and per-tenant deploy
+              isolation so a misconfigured slug can only ever see its own data.</td>
+          </tr>
+          <tr>
+            <td class="pick">Partial backfill hides pages</td>
+            <td>Existing live pages disappear mid-migration.</td>
+            <td>Backfill is additive and idempotent, indexes are created first, the run verifies a residual
+              count of <code>0</code> untagged documents, and it is fully reversible.</td>
+          </tr>
+          <tr>
+            <td class="pick">SSG blow-up / stale cache</td>
+            <td>Every tenant's pages rebuilt together, or stale content served after publish.</td>
+            <td>Static generation is scoped per tenant, ISR keeps pages fresh, and on-demand revalidation updates
+              a page immediately without a full rebuild.</td>
+          </tr>
+          <tr>
+            <td class="pick">Duplicated data-access drift</td>
+            <td>Copied query logic diverges and one copy forgets the tenant filter.</td>
+            <td>Eliminated at the source: a single <code>packages/db</code> owns all data access, enforced by the
+              same lint rule.</td>
+          </tr>
+          <tr>
+            <td class="pick">Pre-existing security holes</td>
+            <td>Unauthenticated edits and cross-tenant reads today.</td>
+            <td>All fixed as part of Phase 3: guard the unguarded <code>PUT /api/webpageContent/[id]</code> and
+              <code>/api/webpage/list</code>, scope the snapshot dump, replace the hardcoded draft secret, and
+              resolve the <code>.com</code>/<code>.io</code> metadata mismatch.</td>
+          </tr>
+          <tr>
+            <td class="pick">Theming regression</td>
+            <td>A component looks wrong after the token migration.</td>
+            <td>Tokens ship with the current values as fallbacks, migration runs in reviewable waves, and each
+              wave is published before the next begins.</td>
+          </tr>
+          <tr>
+            <td class="pick">Stale tenant context</td>
+            <td>A write lands under the wrong tenant after a switch or a revoked membership.</td>
+            <td>Re-validate tenant membership on every sensitive write, not just at switch time.</td>
+          </tr>
+          <tr>
+            <td class="pick">Per-tenant deploy ops cost</td>
+            <td>Managing N Amplify apps by hand becomes error-prone.</td>
+            <td>Per-tenant deployments are templated as infrastructure-as-code so a new tenant is a
+              parameterised, repeatable provision.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>Verification</h2>
+    <p>The plan is only done when these checks pass. They are the acceptance criteria for the MVP milestone.</p>
+    <ul>
+      <li><b>Isolation tests.</b> Reads and updates from tenant A against tenant B return nothing and
+        <code>404</code> on a cross-tenant <code>_id</code>; every insert is proven to stamp <code>tenantId</code>.</li>
+      <li><b>Lint gate.</b> CI fails on any raw collection access or <code>startMongo</code> call made outside
+        <code>packages/db</code>, so the scoped repository is the only data path.</li>
+      <li><b>Backfill dry-run.</b> The dry-run reports <code>0</code> untagged documents remaining and confirms the
+        <code>clouda</code> document counts are unchanged before and after.</li>
+      <li><b>glue-main parity.</b> With <code>TENANT_SLUG=clouda</code>, the site renders byte-identically to
+        today — proof the refactor is behaviour-preserving.</li>
+      <li><b>Second-tenant E2E.</b> Build and publish a page for the new tenant; it renders on the new domain with
+        its own theme, tenant 1 never appears anywhere in it, and on-demand revalidation updates it without a
+        rebuild.</li>
+      <li><b>Auth.</b> <code>requirePermission</code> returns the resolved <code>tenantId</code>, no cross-tenant
+        access is possible, and the Super User can manage all tenants.</li>
+    </ul>
+
+    <div class="ok"><b>Definition of done for MVP.</b> A real second tenant is live on its own domain and theme,
+      the existing <code>clouda</code> site is provably unchanged, and every isolation, lint, parity, E2E and auth
+      check above is green.</div>
+
+    <div class="pagenav"><a class="prev" href="component-config.html"><div class="dir">&larr; Prev</div><div class="ttl">6 &middot; Component Configuration</div></a><span></span></div>
+    <div class="footer">Clouda Glue Solutions &middot; Multi-Tenancy Documentation &middot; Proposed &mdash; awaiting approval.</div>
+  </main>
+</div>
+</body>
+</html>

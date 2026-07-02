@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Multi-Brand Platform · Clouda Glue Solutions</title>
+<style>
+  :root{
+    --orange:#f96f2d; --orange-2:#ff8f57; --orange-soft:#fff2ea;
+    --ink:#171a21; --muted:#5c6673; --line:#e7ebf1;
+    --bg:#fbfbfd; --card:#ffffff;
+    --teal:#0ea5a5; --purple:#7c5cff; --blue:#2563eb; --green:#12915b; --amber:#c77700; --red:#e5484d;
+    --radius:16px; --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:"SFMono-Regular",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:17px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .container{max-width:1000px;margin:0 auto;padding:0 24px}
+  a{color:var(--orange);text-decoration:none}
+  a:hover{text-decoration:underline}
+  h2{font-size:clamp(24px,3.4vw,30px);letter-spacing:-.4px;margin:0 0 6px}
+  h3{font-size:19px;margin:0 0 6px}
+  p{margin:12px 0}
+  .eyebrow{display:inline-block;font-size:12.5px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--orange)}
+
+  /* Hero */
+  .hero{background:
+      radial-gradient(1100px 500px at 78% -10%, #fff1e8 0%, rgba(255,241,232,0) 60%),
+      linear-gradient(180deg,#ffffff 0%,#fbfbfd 100%);
+    border-bottom:1px solid var(--line);padding:64px 0 56px}
+  .hero h1{font-size:clamp(32px,5.6vw,52px);line-height:1.08;letter-spacing:-1px;margin:14px 0 16px;max-width:16ch}
+  .hero .lede{font-size:clamp(18px,2.4vw,21px);color:var(--muted);max-width:60ch;margin:0}
+  .status{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid #ffd7c2;color:var(--amber);
+    font-weight:600;font-size:13px;padding:6px 13px;border-radius:999px;margin-top:22px}
+  .status::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--orange)}
+
+  /* Section rhythm */
+  section{padding:56px 0}
+  section + section{border-top:1px solid var(--line)}
+  .lead{font-size:19px;color:var(--muted);max-width:66ch}
+
+  /* Value cards */
+  .grid{display:grid;gap:18px;margin-top:28px}
+  .grid.cols-2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+  .grid.cols-3{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+  .vcard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+  .vcard .ic{width:44px;height:44px;border-radius:12px;background:var(--orange-soft);display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:14px}
+  .vcard h3{font-size:17.5px}
+  .vcard p{margin:6px 0 0;font-size:15.5px;color:var(--muted);line-height:1.6}
+
+  /* Diagram */
+  .diagram{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:26px clamp(14px,3vw,30px);
+    margin-top:26px;box-shadow:0 8px 30px rgba(16,24,40,.06)}
+  .diagram svg{width:100%;height:auto;display:block}
+  .diagram .cap{text-align:center;color:var(--muted);font-size:14px;margin-top:14px}
+  .legend{display:flex;flex-wrap:wrap;gap:16px 22px;justify-content:center;margin-top:8px;font-size:13.5px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:7px}
+  .legend i{width:22px;height:0;border-top:3px solid var(--orange);display:inline-block;border-radius:3px}
+  .legend i.dash{border-top-style:dashed;border-color:#9aa4b2}
+  .legend b{width:12px;height:12px;border-radius:3px;display:inline-block}
+
+  /* Steps */
+  ol.steps{counter-reset:s;list-style:none;padding:0;margin:26px 0 0}
+  ol.steps li{position:relative;padding:0 0 22px 56px;border-left:2px solid var(--line);margin-left:16px}
+  ol.steps li:last-child{border-left-color:transparent;padding-bottom:0}
+  ol.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:-17px;top:-4px;width:34px;height:34px;
+    background:var(--orange);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px}
+  ol.steps li b{display:block;font-size:16.5px;margin-bottom:2px}
+  ol.steps li span{color:var(--muted);font-size:15.5px}
+
+  /* Safeguards */
+  .safe{display:flex;gap:16px;align-items:flex-start;padding:16px 0;border-bottom:1px solid var(--line)}
+  .safe:last-child{border-bottom:none}
+  .safe .chk{flex:none;width:30px;height:30px;border-radius:50%;background:#e8f7ef;color:var(--green);display:flex;align-items:center;justify-content:center;font-weight:700}
+  .safe b{display:block}
+  .safe span{color:var(--muted);font-size:15.5px}
+
+  /* Roadmap */
+  .road{display:grid;gap:16px;margin-top:26px}
+  .phase{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px;display:grid;
+    grid-template-columns:120px 1fr;gap:20px;align-items:start}
+  .phase .tag{font-weight:700;font-size:13px;color:#fff;background:var(--orange);border-radius:999px;padding:5px 0;text-align:center}
+  .phase.mvp{border-color:#ffd7c2;background:linear-gradient(180deg,#fff8f4,#fff)}
+  .phase.later .tag{background:#aeb6c2}
+  .phase h3{font-size:17px}
+  .phase p{margin:4px 0 0;color:var(--muted);font-size:15.5px}
+  .milestone{margin-top:22px;background:var(--orange-soft);border:1px solid #ffd7c2;border-radius:var(--radius);padding:18px 22px;font-size:16px}
+
+  /* Decisions table */
+  .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);margin-top:24px;background:var(--card)}
+  table{border-collapse:collapse;width:100%;min-width:560px;font-size:15.5px}
+  th,td{text-align:left;padding:14px 18px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#fafbfc;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+  tr:last-child td{border-bottom:none}
+  td .pick{font-weight:700;color:var(--ink)}
+
+  .footer{padding:40px 0 60px;color:var(--muted);font-size:14px}
+  .footer .container{border-top:1px solid var(--line);padding-top:24px}
+  @media (max-width:640px){
+    .phase{grid-template-columns:1fr;gap:8px}
+    section{padding:44px 0}
+  }
+</style>
+</head>
+<body>
+
+  <div class="hero">
+    <div class="container">
+      <span class="eyebrow">Platform Proposal</span>
+      <h1>One platform. Many branded websites.</h1>
+      <p class="lede">Run and manage websites for many brands or clients from a single system — each with its
+        own domain and its own distinct look and feel, all built from one shared, well-organised toolkit.</p>
+      <div class="status">Proposed — for your review and approval</div>
+    </div>
+  </div>
+
+  <!-- WHAT YOU GET -->
+  <section>
+    <div class="container">
+      <span class="eyebrow">The opportunity</span>
+      <h2>What this lets you do</h2>
+      <p class="lead">Today the platform powers a single website. This proposal turns it into a
+        <b>multi-brand platform</b> — the same proven system, reused for every brand, without rebuilding it each time.</p>
+      <div class="grid cols-2">
+        <div class="vcard">
+          <div class="ic">🚀</div>
+          <h3>Launch a new brand fast</h3>
+          <p>Standing up a new brand website becomes a repeatable setup — its own web address, its own identity —
+            instead of a fresh build every time.</p>
+        </div>
+        <div class="vcard">
+          <div class="ic">🎛️</div>
+          <h3>Manage everything in one place</h3>
+          <p>Your team logs in once, chooses which brand they’re working on, and edits that brand’s pages — all
+            from a single content system.</p>
+        </div>
+        <div class="vcard">
+          <div class="ic">🎨</div>
+          <h3>Every brand looks unique</h3>
+          <p>Each brand gets its own theme — its own colours, fonts and logo — even though they share the same
+            underlying building blocks.</p>
+        </div>
+        <div class="vcard">
+          <div class="ic">🧩</div>
+          <h3>A tidy, shared toolkit</h3>
+          <p>One organised library of page components. You decide which are available to everyone, to a few
+            brands, or to just one — so the catalogue never becomes a mess as it grows.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS + DIAGRAM -->
+  <section>
+    <div class="container">
+      <span class="eyebrow">How it works</span>
+      <h2>The big picture</h2>
+      <p class="lead">One content system and one shared foundation feed many independent brand websites. Each
+        brand’s content is kept strictly separate, and each site is published on its own domain with its own theme.</p>
+
+      <div class="diagram">
+        <svg viewBox="0 0 1080 700" role="img" aria-label="High-level architecture: your team uses one composer to manage many brand websites that share a common foundation and central content store while each brand's data stays isolated, and each site is published on its own domain with its own theme.">
+          <defs>
+            <marker id="arw" markerWidth="11" markerHeight="11" refX="7.5" refY="3.4" orient="auto">
+              <path d="M0,0 L8.4,3.4 L0,6.8 Z" fill="#f96f2d"></path>
+            </marker>
+            <marker id="arwg" markerWidth="11" markerHeight="11" refX="7.5" refY="3.4" orient="auto">
+              <path d="M0,0 L8.4,3.4 L0,6.8 Z" fill="#9aa4b2"></path>
+            </marker>
+            <style>
+              .box{fill:#fff;stroke:#dfe4ec;stroke-width:1.5}
+              .band{fill:#f7f9fc;stroke:#e7ebf1;stroke-width:1.5}
+              .hdr{font:700 16px var(--sans,sans-serif);fill:#171a21}
+              .hdrw{font:700 16px var(--sans,sans-serif);fill:#ffffff}
+              .sub{font:13px var(--sans,sans-serif);fill:#5c6673}
+              .tiny{font:12px var(--sans,sans-serif);fill:#727c8a}
+              .flow{stroke:#f96f2d;stroke-width:2.6;fill:none}
+              .flowg{stroke:#9aa4b2;stroke-width:2;fill:none;stroke-dasharray:6 5}
+              .lbl{font:600 12px var(--sans,sans-serif);fill:#8a94a2}
+              .lblo{font:700 12px var(--sans,sans-serif);fill:#c2410c}
+              .cap-l{font:700 12px var(--sans,sans-serif);fill:#8a94a2;letter-spacing:.6px}
+              .pill{font:700 12px var(--sans,sans-serif);fill:#c2410c}
+              .pillb{font:700 12px var(--sans,sans-serif);fill:#0e7c7c}
+              .pillc{font:700 12px var(--sans,sans-serif);fill:#5b3ed6}
+            </style>
+          </defs>
+
+          <!-- ===== AUTHORING ROW ===== -->
+          <rect class="box" x="70" y="74" width="170" height="72" rx="12"></rect>
+          <text class="hdr" x="155" y="106" text-anchor="middle">Your team</text>
+          <text class="sub" x="155" y="127" text-anchor="middle">editors &amp; admins</text>
+
+          <rect x="360" y="52" width="360" height="112" rx="14" fill="#fff7f2" stroke="#ffcdb1" stroke-width="1.6"></rect>
+          <path d="M374,52 h332 a14,14 0 0 1 14,14 v26 h-360 v-26 a14,14 0 0 1 14,-14 z" fill="#f96f2d"></path>
+          <text class="hdrw" x="540" y="80" text-anchor="middle">Composer — one content system</text>
+          <text class="sub" x="540" y="118" text-anchor="middle">Log in · choose a brand · build pages visually</text>
+          <rect x="452" y="130" width="176" height="26" rx="13" fill="#ffe6d8"></rect>
+          <text class="pill" x="540" y="148" text-anchor="middle">🔀 Brand switcher</text>
+
+          <!-- ===== SHARED FOUNDATION BAND ===== -->
+          <rect class="band" x="60" y="210" width="960" height="150" rx="16"></rect>
+          <text class="cap-l" x="80" y="235">SHARED FOUNDATION · built once, reused by every brand</text>
+
+          <rect class="box" x="90" y="256" width="420" height="86" rx="12"></rect>
+          <text class="hdr" x="300" y="290" text-anchor="middle">Shared component toolkit</text>
+          <text class="sub" x="300" y="311" text-anchor="middle">one organised library of page building blocks</text>
+          <text class="tiny" x="300" y="330" text-anchor="middle">shown per brand: everyone · some · one</text>
+
+          <rect class="box" x="570" y="256" width="420" height="86" rx="12"></rect>
+          <text class="hdr" x="780" y="290" text-anchor="middle">Central content library</text>
+          <text class="sub" x="780" y="311" text-anchor="middle">every page tagged by brand</text>
+          <text class="tiny" x="780" y="330" text-anchor="middle">🔒 each brand’s data fully walled off</text>
+
+          <!-- ===== DELIVERY ROW: BRAND SITES ===== -->
+          <!-- Brand A -->
+          <rect class="box" x="90" y="426" width="270" height="120" rx="14"></rect>
+          <rect x="90" y="426" width="8" height="120" rx="4" fill="#f96f2d"></rect>
+          <text class="hdr" x="229" y="466" text-anchor="middle">Brand A website</text>
+          <text class="sub" x="229" y="489" text-anchor="middle">branda.com</text>
+          <rect x="175" y="504" width="108" height="26" rx="13" fill="#fff2ea"></rect>
+          <text class="pill" x="229" y="522" text-anchor="middle">Theme A</text>
+          <!-- Brand B -->
+          <rect class="box" x="405" y="426" width="270" height="120" rx="14"></rect>
+          <rect x="405" y="426" width="8" height="120" rx="4" fill="#0ea5a5"></rect>
+          <text class="hdr" x="544" y="466" text-anchor="middle">Brand B website</text>
+          <text class="sub" x="544" y="489" text-anchor="middle">brandb.com</text>
+          <rect x="490" y="504" width="108" height="26" rx="13" fill="#e6fafa"></rect>
+          <text class="pillb" x="544" y="522" text-anchor="middle">Theme B</text>
+          <!-- Brand C -->
+          <rect class="box" x="720" y="426" width="270" height="120" rx="14"></rect>
+          <rect x="720" y="426" width="8" height="120" rx="4" fill="#7c5cff"></rect>
+          <text class="hdr" x="859" y="466" text-anchor="middle">Brand C website</text>
+          <text class="sub" x="859" y="489" text-anchor="middle">brandc.com</text>
+          <rect x="805" y="504" width="108" height="26" rx="13" fill="#f0edff"></rect>
+          <text class="pillc" x="859" y="522" text-anchor="middle">Theme C</text>
+
+          <!-- ===== VISITORS ROW ===== -->
+          <rect class="band" x="90" y="600" width="900" height="56" rx="14"></rect>
+          <text class="hdr" x="540" y="633" text-anchor="middle">Visitors — the public, each on a brand’s own domain</text>
+
+          <!-- ===== FLOW ARROWS ===== -->
+          <!-- editors -> composer -->
+          <path class="flow" d="M240,110 L352,110" marker-end="url(#arw)"></path>
+          <!-- component toolkit -> composer -->
+          <path class="flow" d="M330,256 C348,214 402,184 452,166" marker-end="url(#arw)"></path>
+          <text class="lbl" x="336" y="206" text-anchor="middle">choose blocks</text>
+          <!-- composer -> central store -->
+          <path class="flow" d="M600,166 C652,204 706,224 748,254" marker-end="url(#arw)"></path>
+          <text class="lbl" x="712" y="206" text-anchor="middle">saves to that brand</text>
+
+          <!-- foundation -> brand sites -->
+          <path class="flow" d="M255,342 L228,424" marker-end="url(#arw)"></path>
+          <path class="flow" d="M540,360 L540,424" marker-end="url(#arw)"></path>
+          <path class="flow" d="M825,342 L852,424" marker-end="url(#arw)"></path>
+          <text class="lblo" x="690" y="398" text-anchor="middle">only its own brand’s content</text>
+
+          <!-- visitors -> brand sites (dashed) -->
+          <path class="flowg" d="M229,600 L229,550" marker-end="url(#arwg)"></path>
+          <path class="flowg" d="M544,600 L544,550" marker-end="url(#arwg)"></path>
+          <path class="flowg" d="M859,600 L859,550" marker-end="url(#arwg)"></path>
+          <text class="lbl" x="544" y="582" text-anchor="middle">visitors browse</text>
+        </svg>
+        <div class="legend">
+          <span><i></i> content &amp; data flow</span>
+          <span><i class="dash"></i> visitors browsing</span>
+          <span><b style="background:#f96f2d"></b> Brand A</span>
+          <span><b style="background:#0ea5a5"></b> Brand B</span>
+          <span><b style="background:#7c5cff"></b> Brand C</span>
+        </div>
+        <div class="cap">One system in, many independent branded sites out — sharing a foundation, isolated by brand.</div>
+      </div>
+
+      <ol class="steps">
+        <li><b>Your team logs in and picks a brand</b><span>A single content system with a brand switcher. Everyone sees only the brands they’re allowed to work on.</span></li>
+        <li><b>They build pages from the shared toolkit</b><span>Pages are assembled from a library of ready-made components. Each brand only sees the components made available to it.</span></li>
+        <li><b>Content is saved, tagged to that brand</b><span>Everything is stored centrally but labelled by brand, so one brand’s content doesn’t appear on another’s site.</span></li>
+        <li><b>Each brand’s site is published on its own domain</b><span>Each site runs and is published on its own, with its own web address and its own theme — colours, fonts and logo.</span></li>
+        <li><b>Visitors see a fully branded experience</b><span>To the public, each site looks like a standalone product. The shared foundation behind the scenes is invisible.</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- SAFEGUARDS -->
+  <section>
+    <div class="container">
+      <span class="eyebrow">Peace of mind</span>
+      <h2>Safe by design</h2>
+      <p class="lead">Because many brands share one system, keeping their data and access separate is the top
+        priority. This separation is built into the core of the system, so it’s applied automatically
+        everywhere — rather than depending on each page to remember.</p>
+      <div style="margin-top:22px">
+        <div class="safe"><div class="chk">✓</div><div><b>Each brand’s content stays on its own site</b><span>Every request is automatically limited to the brand being worked on. The separation lives in the core of the system, not in each individual screen.</span></div></div>
+        <div class="safe"><div class="chk">✓</div><div><b>Editors only touch their assigned brands</b><span>Access is granted per brand. Someone can be an editor on one brand and have no access to another.</span></div></div>
+        <div class="safe"><div class="chk">✓</div><div><b>Separate, independent websites</b><span>Each brand’s website runs on its own, so a change or issue on one site doesn’t affect the others.</span></div></div>
+        <div class="safe"><div class="chk">✓</div><div><b>Nothing breaks during the switch-over</b><span>The current website keeps working exactly as it does today throughout the rollout; multi-brand capability is added underneath it, step by step.</span></div></div>
+        <div class="safe"><div class="chk">✓</div><div><b>A more robust system overall</b><span>Along the way we’ll also tidy up a few configuration items we noticed while reviewing the system, making it sturdier for everyone.</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ROADMAP -->
+  <section>
+    <div class="container">
+      <span class="eyebrow">The plan</span>
+      <h2>How we’ll roll it out</h2>
+      <p class="lead">We start with the essential foundation and prove the whole idea end-to-end by taking one
+        real second brand fully live. Enhancements follow once that’s working.</p>
+
+      <div class="road">
+        <div class="phase mvp"><div class="tag">Step 1</div><div><h3>Lay the foundation</h3><p>Introduce the brand concept into the data, with the safeguards that keep every brand’s content separate — all without changing how the current site behaves.</p></div></div>
+        <div class="phase mvp"><div class="tag">Step 2</div><div><h3>Make the public site brand-aware</h3><p>The website learns which brand it is serving, pulling that brand’s content, settings and analytics (its own visitor stats and marketing tags).</p></div></div>
+        <div class="phase mvp"><div class="tag">Step 3</div><div><h3>Add per-brand theming</h3><p>A theming layer so each brand gets its own look. Colours, fonts and logo apply to a new brand right away; finer styling of individual components is refined over time.</p></div></div>
+        <div class="phase mvp"><div class="tag">Step 4</div><div><h3>Brand picker &amp; permissions in the editor</h3><p>The content system gets the brand switcher, per-brand access, and built-in checks that prevent anyone from editing the wrong brand by mistake.</p></div></div>
+        <div class="phase mvp"><div class="tag">Step 5 🎯</div><div><h3>Take a second brand live</h3><p><b>The milestone:</b> a real second brand, live on its own domain with its own theme — proving the whole process works, from building the pages to visitors seeing the live, branded site.</p></div></div>
+        <div class="phase later"><div class="tag">Later</div><div><h3>Platform enhancements</h3><p>A searchable component catalogue, admin screens to manage brands and themes with live preview, the full component styling refresh, and per-brand backups.</p></div></div>
+      </div>
+
+      <div class="milestone">🎯 <b>Key milestone:</b> one real second brand fully live on its own domain with its
+        own theme — the point at which the multi-brand platform has proven itself.</div>
+    </div>
+  </section>
+
+  <!-- WHY THIS APPROACH -->
+  <section>
+    <div class="container">
+      <span class="eyebrow">Key choices</span>
+      <h2>Why we recommend this approach</h2>
+      <p class="lead">Four decisions shape the plan. In each case we’ve chosen the option that gets you to value
+        fastest and safest, while leaving room to grow.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Decision</th><th>Our recommendation</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td>How brand data is kept separate</td><td class="pick">One shared store, tagged by brand</td><td>Strong isolation with the simplest, lowest-cost setup — and a clear path to fully separate storage later for any brand that needs it.</td></tr>
+            <tr><td>How each site is published</td><td class="pick">Each brand runs on its own site</td><td>Matches “separate sites on separate domains,” gives the strongest isolation, and keeps each site simple and independent.</td></tr>
+            <tr><td>How brand styling is delivered</td><td class="pick">Foundation first, then refine</td><td>New brands get a distinct look immediately; the deeper component refresh happens gradually with low risk.</td></tr>
+            <tr><td>How ambitious to be at first</td><td class="pick">Prove it with one second brand</td><td>Delivers real value quickly and de-risks the approach before investing in the broader platform tooling.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- NEXT STEPS -->
+  <section>
+    <div class="container">
+      <span class="eyebrow">Next</span>
+      <h2>What we need from you</h2>
+      <p class="lead">To move ahead we’d like your sign-off on the direction above, and a first brand to target
+        as the second site — including its domain and desired look. From there we begin with the foundation
+        work, which is invisible to the live site.</p>
+      <p style="color:var(--muted);font-size:15.5px">A detailed technical version of this plan is available for your engineering team as
+        <b>index.html</b> and <b>plan.md</b> in the same folder.</p>
+    </div>
+  </section>
+
+  <div class="footer">
+    <div class="container">
+      Clouda Glue Solutions · Multi-Brand Platform Proposal · Proposed — awaiting your approval.
+    </div>
+  </div>
+
+</body>
+</html>
