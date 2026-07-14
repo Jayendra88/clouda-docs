@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Clouda Glue — Multi-Tenant Platform Architecture & Implementation Plan</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1a1a1a; --muted: #5a5a5a; --border: #e2e2e2;
+    --code-bg: #f6f6f7; --accent: #0f6e56; --accent-bg: #e1f5ee;
+    --warn-bg: #faeeda; --warn-fg: #633806;
+  }
+  body { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; color: var(--fg); background: var(--bg); max-width: 980px; margin: 0 auto; padding: 40px 24px 100px; line-height: 1.6; }
+  h1 { font-size: 28px; border-bottom: 3px solid var(--accent); padding-bottom: 12px; }
+  h2 { font-size: 22px; margin-top: 56px; padding-top: 8px; border-top: 1px solid var(--border); color: var(--accent); }
+  h3 { font-size: 17px; margin-top: 30px; }
+  h4 { font-size: 14px; margin-top: 22px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); }
+  p, li { font-size: 15px; }
+  code { font-family: "SF Mono", Consolas, Menlo, monospace; font-size: 13px; background: var(--code-bg); padding: 2px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: 12.5px; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); }
+  .note { background: var(--accent-bg); border-left: 4px solid var(--accent); padding: 10px 16px; border-radius: 6px; margin: 16px 0; font-size: 14px; }
+  .warn { background: var(--warn-bg); border-left: 4px solid #ba7517; padding: 10px 16px; border-radius: 6px; margin: 16px 0; font-size: 14px; color: var(--warn-fg); }
+  .toc { background: var(--code-bg); border-radius: 8px; padding: 20px 28px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc li { margin-bottom: 4px; }
+  .repo-tag { display: inline-block; background: var(--accent); color: white; font-family: monospace; font-size: 12px; padding: 2px 8px; border-radius: 4px; }
+  .tree { font-family: monospace; font-size: 13px; white-space: pre; background: var(--code-bg); padding: 16px; border-radius: 8px; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+</style>
+</head>
+<body>
+
+<h1>Clouda Glue — Multi-Tenant Platform<br>Architecture &amp; Implementation Plan</h1>
+<p class="note">This document is the complete build spec for the multi-tenant Glue platform. It is written to be handed to a developer (or an AI coding agent) as the primary prompt for generating the full project across all repos. Every section includes concrete file layouts and working code patterns, not just prose.</p>
+
+<div class="toc">
+<strong>Contents</strong>
+<ol>
+<li><a href="#goals">Goals &amp; constraints</a></li>
+<li><a href="#topology">Repository topology</a></li>
+<li><a href="#repos">Repo-by-repo responsibilities</a></li>
+<li><a href="#tenant-repo">Tenant repo — deep dive</a></li>
+<li><a href="#federation">Module Federation: dynamic runtime remotes</a></li>
+<li><a href="#registry">Tenant registry &amp; resolution</a></li>
+<li><a href="#localdev">Local dev workflow (<code>npm run dev</code>)</a></li>
+<li><a href="#components">Component override &amp; extension pattern</a></li>
+<li><a href="#theming">Theming system</a></li>
+<li><a href="#services">Tenant-specific service layer &amp; API routes</a></li>
+<li><a href="#data">Data access layer &amp; multi-tenant DB</a></li>
+<li><a href="#composer">Composer app — dynamic CMS behavior</a></li>
+<li><a href="#permissions">Repo permissions &amp; access control</a></li>
+<li><a href="#cicd">CI/CD &amp; deployment pipelines</a></li>
+<li><a href="#flow">End-to-end request flow</a></li>
+<li><a href="#appendix">Appendix: env vars, tenant_registry schema, glossary</a></li>
+</ol>
+</div>
+
+<h2 id="goals">1. Goals &amp; constraints</h2>
+<ul>
+<li>Tenants can edit <strong>only their own components and services</strong> — never the shared component library, core rendering engine, or other tenants' code.</li>
+<li>Running <code>npm run dev</code> inside a tenant's repo makes the storefront (<code>glue-main</code>) render live using that tenant's components — the same experience as VTEX FastStore's local linking.</li>
+<li>Tenants can consume prebuilt components from <code>glue-components</code> as-is, or wrap/restyle them without forking.</li>
+<li>Tenants can override the site's visual theme independently of code changes (and non-developers can do it from the composer).</li>
+<li><code>glue-composer</code> runs as one standalone deployment and resolves each tenant's components dynamically at request time — it never bundles tenant code at build time (VTEX Headless CMS model).</li>
+<li><code>glue-main</code> and <code>glue-composer</code> ship once and are barely touched after initial development; all day-to-day tenant work happens in the tenant repo.</li>
+</ul>
+
+<h2 id="topology">2. Repository topology</h2>
+<div class="tree">┌────────────────────────────────────────────────────────────┐
+│ PUBLISHED PACKAGES (npm / AWS CodeArtifact)                │
+│                                                              │
+│  glue-components   — base component library + schema.jsons │
+│  glue-core          — section renderer, layout, data hooks │
+│  glue-data          — tenant-scoped data access layer       │
+│  glue-services      — generic service layer + hook contract│
+└────────────────────────────────────────────────────────────┘
+                 ▲ consumed as npm deps            ▲ dynamic remote (Module Federation)
+                 │                                  │
+┌────────────────┴───────────────┐   ┌──────────────┴───────────────┐
+│ glue-main   (deployed once)    │   │ glue-composer (deployed once)│
+│ storefront renderer            │   │ standalone CMS               │
+└────────────────▲───────────────┘   └──────────────▲───────────────┘
+                 │ resolves tenant's remoteEntry.js at runtime, per request
+                 │        (URL comes from tenant_registry)
+┌────────────────┴──────────────────────────────────────────────────┐
+│ tenant-repo-acme   (one repo per tenant, tenant-owned)             │
+│  components/   — tenant components + overrides of glue-components │
+│  services/     — tenant-specific API routes / business logic      │
+│  theme/        — tenant design tokens                             │
+│  exposes a Module Federation remote: remoteEntry.js                │
+└─────────────────────────────────────────────────────────────────────┘</div>
+
+<p>The key change from a build-time-linked storefront to this model: <strong><code>glue-main</code> no longer imports tenant components at build time.</strong> It imports <code>glue-core</code> (the rendering engine) as a normal npm dependency, and resolves the tenant's actual component set as a Module Federation remote, at request time, based on which tenant is being served. This is what makes a tenant's local <code>npm run dev</code> instantly visible in <code>glue-main</code> without anyone rebuilding <code>glue-main</code>.</p>
+
+<h2 id="repos">3. Repo-by-repo responsibilities</h2>
+
+<h3><span class="repo-tag">glue-components</span></h3>
+<ul>
+<li>Prebuilt, business-agnostic components (<code>Button</code>, <code>Hero</code>, <code>ProductCard</code>, <code>Carousel</code>, …), each with a co-located <code>schema.json</code> describing its editable props.</li>
+<li>Ships a default <code>theme.css</code> defining every CSS variable a component reads. Tenants override values, never the variable names.</li>
+<li>Published to CodeArtifact/npm. Tenants install it as a normal dependency and either use components directly or wrap them.</li>
+</ul>
+
+<h3><span class="repo-tag">glue-core</span></h3>
+<ul>
+<li><code>SectionRenderer</code> — walks a page's section list and renders the matching component from whichever registry (base + tenant) is resolved for the current request.</li>
+<li><code>getTenantComponentRegistry(tenantSlug)</code> — the Module Federation resolution logic (detailed in §5–6).</li>
+<li>Layout primitives (grid, container, spacing) shared by every tenant's storefront.</li>
+</ul>
+
+<h3><span class="repo-tag">glue-main</span></h3>
+<ul>
+<li>The one deployed Next.js app that renders every tenant's live storefront (host header / subdomain decides which tenant).</li>
+<li>Depends on <code>glue-core</code>, <code>glue-data</code> as npm packages. Contains no tenant business logic.</li>
+<li>Barely changes after initial build — new tenant capability comes from the tenant repo, not from touching this app.</li>
+</ul>
+
+<h3><span class="repo-tag">glue-composer</span></h3>
+<ul>
+<li>Standalone CMS/editor. Same dynamic remote resolution as <code>glue-main</code>, but also reads each component's <code>schema.json</code> to build the property editor and page-builder UI.</li>
+<li>Owns page/content CRUD via <code>glue-services</code>; has no compiled dependency on any tenant's code.</li>
+</ul>
+
+<h3><span class="repo-tag">glue-data</span> / <span class="repo-tag">glue-services</span></h3>
+<ul>
+<li><code>glue-data</code>: tenant-scoped DB access, the <code>tenant_registry</code> reader, page/content repositories.</li>
+<li><code>glue-services</code>: generic business logic (checkout, page publish workflow, content validation against <code>schema.json</code>) exposed as functions plus a <strong>hook contract</strong> tenants can plug into from their own repo — see §10.</li>
+</ul>
+
+<h3><span class="repo-tag">tenant-repo-&lt;slug&gt;</span></h3>
+<p>One per tenant, tenant-owned, covered fully in the next section.</p>
+
+<h2 id="tenant-repo">4. Tenant repo — deep dive</h2>
+<div class="tree">tenant-repo-acme/
+├── src/
+│   ├── components/
+│   │   ├── Hero/
+│   │   │   ├── index.tsx            ← tenant-authored component
+│   │   │   └── schema.json          ← editable-props contract for composer
+│   │   ├── ProductCard/
+│   │   │   ├── index.tsx            ← wraps a glue-components component
+│   │   │   └── schema.json
+│   │   └── index.ts                 ← registry export (see §8)
+│   ├── services/
+│   │   ├── pricing.ts               ← tenant-specific business logic
+│   │   └── api/
+│   │       └── checkout/route.ts    ← extends glue-services checkout handler
+│   ├── theme/
+│   │   ├── tokens.json              ← design tokens (colors, type, spacing)
+│   │   └── theme.css                ← generated from tokens.json at build
+│   └── federation/
+│       ├── expose-components.ts     ← Module Federation "exposes" entry
+│       └── expose-theme.ts
+├── next.config.js                    ← ModuleFederationPlugin config
+├── tenant.config.json                ← slug, DB ref, feature flags
+├── .env.local                        ← service configs, secrets
+└── package.json
+</div>
+<p>Everything the tenant is allowed to touch lives inside this one repo: their components, their theme, and their tenant-specific service/API logic. Nothing here is imported by <code>glue-main</code> or <code>glue-composer</code> at build time — it is only ever pulled in dynamically at runtime as a Module Federation remote.</p>
+
+<h2 id="federation">5. Module Federation: dynamic runtime remotes</h2>
+<p>We use <code>@module-federation/enhanced</code> (Module Federation 2.0's bundler-agnostic runtime) rather than build-time federation, because the remote URL is only known per-request (it depends on which tenant is being served, and — in local dev — points at <code>localhost</code>).</p>
+
+<h4>Tenant repo — exposing components (next.config.js)</h4>
+<pre><code>const { ModuleFederationPlugin } = require('@module-federation/enhanced/webpack');
+
+module.exports = {
+  webpack(config) {
+    config.plugins.push(
+      new ModuleFederationPlugin({
+        name: process.env.TENANT_FEDERATION_NAME, // e.g. "tenant_acme"
+        filename: 'static/chunks/remoteEntry.js',
+        exposes: {
+          './components': './src/federation/expose-components.ts',
+          './theme': './src/federation/expose-theme.ts',
+        },
+        shared: {
+          react: { singleton: true, requiredVersion: false },
+          'react-dom': { singleton: true, requiredVersion: false },
+        },
+      })
+    );
+    return config;
+  },
+};
+</code></pre>
+
+<h4>Tenant repo — the registry entry point (src/federation/expose-components.ts)</h4>
+<pre><code>import Hero from '../components/Hero';
+import heroSchema from '../components/Hero/schema.json';
+import ProductCard from '../components/ProductCard';
+import productCardSchema from '../components/ProductCard/schema.json';
+import { Button } from '@clouda-inc/glue-components'; // used unmodified
+
+const registry = {
+  Hero:        { component: Hero,        schema: heroSchema },
+  ProductCard: { component: ProductCard, schema: productCardSchema },
+  Button:      { component: Button,      schema: null }, // no overrides needed
+};
+
+export default registry;
+</code></pre>
+
+<h4>glue-main / glue-composer — resolving a remote at request time (packages/glue-core/src/registry.ts)</h4>
+<pre><code>import { init, loadRemote } from '@module-federation/runtime';
+import { getTenantFromRegistry } from '@clouda-inc/glue-data';
+
+const initializedRemotes = new Set&lt;string&gt;();
+
+export async function getTenantComponentRegistry(tenantSlug: string) {
+  const tenant = await getTenantFromRegistry(tenantSlug);
+  const remoteName = `tenant_${tenantSlug}`;
+
+  // Local dev override takes priority — see §7
+  const entryUrl = await resolveLocalOverride(tenantSlug) ?? tenant.remoteEntryUrl;
+
+  if (!initializedRemotes.has(remoteName)) {
+    init({
+      name: 'glue_host',
+      remotes: [{ name: remoteName, entry: entryUrl }],
+    });
+    initializedRemotes.add(remoteName);
+  }
+
+  const mod = await loadRemote&lt;{ default: Record&lt;string, any&gt; }&gt;(
+    `${remoteName}/components`
+  );
+  return mod.default;
+}
+</code></pre>
+
+<div class="note">Cache <code>getTenantFromRegistry</code> results for a short TTL (e.g. 30–60s) so a new tenant deploy is picked up quickly without hitting the DB on every request.</div>
+
+<h2 id="registry">6. Tenant registry &amp; resolution</h2>
+<p><code>tenant_registry</code> remains the single source of truth mapping a tenant slug to where its code and config live.</p>
+<pre><code>// tenant_registry document shape
+{
+  "slug": "acme",
+  "remoteEntryUrl": "https://cdn.clouda.io/tenants/acme/v14/remoteEntry.js",
+  "manifestUrl": "https://cdn.clouda.io/tenants/acme/v14/manifest.json",
+  "version": "v14",
+  "dbConnectionRef": "acme-prod-cluster",      // or a discriminator if shared-DB
+  "themeOverrides": { "--color-primary": "#123456" }, // composer-managed, see §9
+  "domains": ["acme.com", "acme.clouda.io"],
+  "createdAt": "2026-05-01T00:00:00Z",
+  "updatedAt": "2026-07-10T00:00:00Z"
+}
+</code></pre>
+<p>Resolution order for which tenant is being served: incoming request's <code>Host</code> header → <code>domains</code> lookup in <code>tenant_registry</code> → <code>slug</code>. Resolve this in middleware in both <code>glue-main</code> and <code>glue-composer</code> and attach it to the request context so downstream code never re-derives it.</p>
+
+<h2 id="localdev">7. Local dev workflow (npm run dev)</h2>
+<p>The goal: a tenant developer runs one command in their own repo and sees <code>glue-main</code> render live with their local, hot-reloading components — no publish step, no touching <code>glue-main</code>.</p>
+
+<h4>tenant-repo package.json</h4>
+<pre><code>{
+  "scripts": {
+    "dev": "clouda-dev tenant-dev"
+  }
+}
+</code></pre>
+
+<h4>What <code>clouda-dev tenant-dev</code> does</h4>
+<ol>
+<li>Starts <code>next dev</code> in the tenant repo (port 3001), which serves a live, HMR-enabled <code>remoteEntry.js</code> at <code>http://localhost:3001/_next/static/chunks/remoteEntry.js</code>.</li>
+<li>Writes a local override file <code>.clouda/local-registry.json</code>:
+<pre><code>{ "slug": "acme", "remoteEntryUrl": "http://localhost:3001/_next/static/chunks/remoteEntry.js" }</code></pre>
+</li>
+<li>Starts (or attaches to an already-running) local <code>glue-main</code> instance with <code>LOCAL_TENANT_OVERRIDE=true</code>.</li>
+<li>Opens the browser to <code>glue-main</code>'s local URL for that tenant. From this point every save in the tenant repo hot-reloads inside <code>glue-main</code>.</li>
+</ol>
+
+<h4>resolveLocalOverride implementation</h4>
+<pre><code>import fs from 'node:fs/promises';
+
+export async function resolveLocalOverride(tenantSlug: string) {
+  if (process.env.LOCAL_TENANT_OVERRIDE !== 'true') return null;
+  try {
+    const raw = await fs.readFile('.clouda/local-registry.json', 'utf-8');
+    const override = JSON.parse(raw);
+    return override.slug === tenantSlug ? override.remoteEntryUrl : null;
+  } catch {
+    return null;
+  }
+}
+</code></pre>
+<p>This is the direct equivalent of VTEX Toolbelt's local linking — the difference is it is powered by a real-time federation remote instead of a proxy tunnel.</p>
+
+<h2 id="components">8. Component override &amp; extension pattern</h2>
+<p>Tenants have three ways to use the library, all valid:</p>
+<table>
+<tr><th>Pattern</th><th>When</th><th>Example</th></tr>
+<tr><td>Use as-is</td><td>No visual/behavior change needed</td><td><code>export { Button } from '@clouda-inc/glue-components'</code></td></tr>
+<tr><td>Restyle via CSS vars</td><td>Same behavior, different look</td><td>Override <code>--color-primary</code> in tenant <code>theme.css</code>; component unchanged</td></tr>
+<tr><td>Wrap/extend</td><td>Extra markup or logic on top of a base component</td><td>See below</td></tr>
+</table>
+<pre><code>// tenant-repo/src/components/ProductCard/index.tsx
+import { ProductCard as BaseProductCard } from '@clouda-inc/glue-components';
+
+export default function ProductCard(props) {
+  return (
+    &lt;div className="acme-product-card-wrapper"&gt;
+      &lt;BaseProductCard {...props} /&gt;
+      {props.isNew &amp;&amp; &lt;span className="acme-badge"&gt;New&lt;/span&gt;}
+    &lt;/div&gt;
+  );
+}
+</code></pre>
+<p>Every tenant component — new or wrapped — needs a <code>schema.json</code> next to it, in the same shape glue-components uses, so the composer can build its editor without special-casing tenant components.</p>
+<pre><code>// schema.json
+{
+  "title": "Hero",
+  "type": "object",
+  "properties": {
+    "headline": { "type": "string", "title": "Headline" },
+    "ctaLabel": { "type": "string", "title": "Button label" },
+    "backgroundImage": { "type": "string", "title": "Background image", "format": "image" }
+  },
+  "required": ["headline"]
+}
+</code></pre>
+
+<h2 id="theming">9. Theming system</h2>
+<p>Three layers, lowest to highest priority:</p>
+<ol>
+<li><strong>Base defaults</strong> — <code>theme.css</code> shipped inside <code>glue-components</code>, defines every variable name.</li>
+<li><strong>Tenant repo defaults</strong> — <code>src/theme/tokens.json</code> in the tenant repo, exposed via the <code>./theme</code> Module Federation entry, compiled at tenant build time.</li>
+<li><strong>Composer runtime overrides</strong> — non-developers tweak colors/fonts in the composer UI; these save to <code>tenant_registry.themeOverrides</code> and win over the tenant repo's own defaults, so a marketer can adjust the theme without a deploy.</li>
+</ol>
+<pre><code>// glue-main: theme resolution, run once per request
+export async function resolveTheme(tenantSlug: string) {
+  const tenant = await getTenantFromRegistry(tenantSlug);
+  const registryMod = await loadRemote&lt;{ default: Record&lt;string, string&gt; }&gt;(
+    `tenant_${tenantSlug}/theme`
+  );
+  return {
+    ...registryMod.default,        // tenant repo defaults
+    ...tenant.themeOverrides,      // composer-managed overrides win
+  };
+}
+</code></pre>
+<pre><code>&lt;!-- injected server-side into the &lt;head&gt;, scoped by data-tenant --&gt;
+&lt;html data-tenant="acme"&gt;
+  &lt;style&gt;
+    [data-tenant="acme"] {
+      --color-primary: #123456;
+      --font-heading: 'Acme Sans', sans-serif;
+    }
+  &lt;/style&gt;
+</code></pre>
+
+<h2 id="services">10. Tenant-specific service layer &amp; API routes</h2>
+<p><code>glue-services</code> exposes generic business logic as a factory that accepts hooks — tenant code supplies the hooks, never forks the handler.</p>
+<pre><code>// packages/glue-services/src/checkout.ts
+export function createCheckoutHandler(hooks: {
+  beforePriceCalculation?: (cart: Cart) => Promise&lt;Cart&gt;;
+  afterOrderCreated?: (order: Order) => Promise&lt;void&gt;;
+} = {}) {
+  return async function handler(req: Request) {
+    let cart = await parseCart(req);
+    if (hooks.beforePriceCalculation) cart = await hooks.beforePriceCalculation(cart);
+    const order = await createOrder(cart);
+    if (hooks.afterOrderCreated) await hooks.afterOrderCreated(order);
+    return Response.json(order);
+  };
+}
+</code></pre>
+<pre><code>// tenant-repo/src/services/api/checkout/route.ts
+import { createCheckoutHandler } from '@clouda-inc/glue-services';
+import { applyLoyaltyDiscount } from '../../pricing';
+
+export const POST = createCheckoutHandler({
+  beforePriceCalculation: applyLoyaltyDiscount,
+});
+</code></pre>
+<p>Note this API route lives <strong>in the tenant repo</strong> and is deployed alongside the tenant's own infrastructure (or as serverless functions the tenant repo owns) — <code>glue-main</code> and <code>glue-composer</code> never proxy or host it.</p>
+
+<h2 id="data">11. Data access layer &amp; multi-tenant DB</h2>
+<p><code>glue-data</code> gives every consumer the same interface regardless of isolation strategy, so the strategy can change later without touching call sites.</p>
+<pre><code>// packages/glue-data/src/db.ts
+type TenantDb = { find: (col: string, q: object) =&gt; Promise&lt;any[]&gt;; /* ...insert, update */ };
+
+export async function getTenantDb(tenantSlug: string): Promise&lt;TenantDb&gt; {
+  const tenant = await getTenantFromRegistry(tenantSlug);
+
+  if (tenant.isolationMode === 'db-per-tenant') {
+    const conn = await getConnection(tenant.dbConnectionRef); // tenant's own DB
+    return { find: (col, q) =&gt; conn.collection(col).find(q).toArray() };
+  }
+
+  // shared-db-with-discriminator: tenantId is injected, never optional
+  const conn = await getSharedConnection();
+  return {
+    find: (col, q) =&gt; conn.collection(col).find({ ...q, tenantId: tenant.slug }).toArray(),
+  };
+}
+</code></pre>
+<div class="warn">Recommendation carried over from the base architecture: prefer <strong>DB-per-tenant</strong> given this is a commerce platform with real per-tenant compliance/data needs. Keep the interface above either way so the decision is reversible.</div>
+
+<h2 id="composer">12. Composer app — dynamic CMS behavior</h2>
+<p>Composer reuses the exact same <code>getTenantComponentRegistry</code> from <code>glue-core</code> — it is not a special case. It additionally reads each entry's <code>schema</code> to render an editor.</p>
+<pre><code>// glue-composer: component picker panel
+async function ComponentPicker({ tenantSlug }: { tenantSlug: string }) {
+  const registry = await getTenantComponentRegistry(tenantSlug);
+  return Object.entries(registry).map(([name, { schema }]) =&gt; (
+    &lt;DraggableComponentTile key={name} name={name} schema={schema} /&gt;
+  ));
+}
+
+// schema-driven prop editor — works for base AND tenant components identically
+function PropEditor({ schema, values, onChange }) {
+  return Object.entries(schema.properties).map(([field, def]: any) =&gt; (
+    &lt;FieldInput
+      key={field}
+      label={def.title}
+      type={def.type}
+      format={def.format}
+      value={values[field]}
+      onChange={(v) =&gt; onChange(field, v)}
+    /&gt;
+  ));
+}
+</code></pre>
+<p>Saving a page writes a section list to the page document via <code>glue-services</code>' page-publish workflow, validating each section's <code>props</code> against that component's <code>schema.json</code> before persisting — this is what stops a bad edit in composer from breaking the live storefront render.</p>
+
+<h2 id="permissions">13. Repo permissions &amp; access control</h2>
+<table>
+<tr><th>Repo</th><th>Tenant dev access</th><th>Enforcement</th></tr>
+<tr><td><code>tenant-repo-&lt;slug&gt;</code></td><td>Full read/write</td><td>GitHub team scoped to this one repo</td></tr>
+<tr><td><code>glue-components</code>, <code>glue-core</code>, <code>glue-data</code>, <code>glue-services</code></td><td>Read-only (or no access)</td><td>CODEOWNERS + branch protection; only the platform team can merge</td></tr>
+<tr><td><code>glue-main</code>, <code>glue-composer</code></td><td>No access</td><td>Not part of tenant org team at all</td></tr>
+</table>
+<ul>
+<li>Each tenant repo's CI pipeline gets a <strong>scoped deploy token</strong> that can only publish to that tenant's own CDN path (<code>/tenants/&lt;slug&gt;/...</code>) and update only its own row in <code>tenant_registry</code> (via an internal API, not direct DB access).</li>
+<li>Composer's theme/content editing writes go through <code>glue-services</code>, which enforces tenant-scoping server-side regardless of what the client sends — never trust a tenant slug coming from the request body alone; derive it from the authenticated session/host.</li>
+</ul>
+
+<h2 id="cicd">14. CI/CD &amp; deployment pipelines</h2>
+<h4>Tenant repo pipeline</h4>
+<ol>
+<li>Lint + test + <code>next build</code> (produces the versioned <code>remoteEntry.js</code> + static chunks).</li>
+<li>Upload build output to <code>https://cdn.clouda.io/tenants/&lt;slug&gt;/&lt;version&gt;/</code> (keep prior versions for instant rollback).</li>
+<li>Call the internal "publish tenant version" API to update <code>tenant_registry.remoteEntryUrl</code> and <code>version</code>.</li>
+<li>No redeploy of <code>glue-main</code>/<code>glue-composer</code> — the new remote is picked up on next request once the tenant_registry cache TTL expires.</li>
+</ol>
+<h4>glue-main / glue-composer pipeline</h4>
+<p>Standard Next.js build/deploy (e.g. AWS Amplify). Redeploys only happen for core rendering engine changes, not tenant work — this is what keeps them "barely touched."</p>
+
+<h2 id="flow">15. End-to-end request flow</h2>
+<ol>
+<li>Request hits <code>glue-main</code> at <code>acme.com/product/123</code>.</li>
+<li>Middleware resolves <code>tenantSlug = "acme"</code> from the <code>Host</code> header via <code>tenant_registry.domains</code>.</li>
+<li><code>getTenantComponentRegistry("acme")</code> resolves the remote (local override if present, else <code>tenant.remoteEntryUrl</code>) and loads the component registry.</li>
+<li><code>resolveTheme("acme")</code> merges base defaults, tenant repo tokens, and composer overrides into CSS variables injected in <code>&lt;head&gt;</code>.</li>
+<li><code>getTenantDb("acme")</code> fetches the page's section list for <code>/product/123</code>.</li>
+<li><code>SectionRenderer</code> (from <code>glue-core</code>) walks the sections, rendering each from the resolved registry.</li>
+<li>Response streams to the browser — a page composed entirely of the tenant's own components, running inside the shared <code>glue-main</code> shell.</li>
+</ol>
+
+<h2 id="appendix">16. Appendix</h2>
+<h3>Environment variables</h3>
+<table>
+<tr><th>Repo</th><th>Variable</th><th>Purpose</th></tr>
+<tr><td>tenant-repo</td><td><code>TENANT_FEDERATION_NAME</code></td><td>Unique remote name, e.g. <code>tenant_acme</code></td></tr>
+<tr><td>tenant-repo</td><td><code>TENANT_SLUG</code></td><td>Matches <code>tenant_registry.slug</code></td></tr>
+<tr><td>glue-main / glue-composer</td><td><code>LOCAL_TENANT_OVERRIDE</code></td><td><code>true</code> in local dev to check <code>.clouda/local-registry.json</code> first</td></tr>
+<tr><td>glue-main / glue-composer</td><td><code>TENANT_REGISTRY_DB_URI</code></td><td>Connection to the tenant_registry store</td></tr>
+<tr><td>all</td><td><code>NODE_ENV</code>, service configs</td><td>Standard per-environment config</td></tr>
+</table>
+
+<h3>Glossary</h3>
+<ul>
+<li><strong>Remote / host</strong> (Module Federation) — the tenant repo is the <em>remote</em> (exposes code); <code>glue-main</code> and <code>glue-composer</code> are <em>hosts</em> (consume it at runtime).</li>
+<li><strong>tenant_registry</strong> — the routing source of truth: slug → remote URL, DB reference, theme overrides, domains.</li>
+<li><strong>schema.json</strong> — the JSON Schema contract each component publishes so the composer can build an editor for it without special-casing.</li>
+</ul>
+
+</body>
+</html>
