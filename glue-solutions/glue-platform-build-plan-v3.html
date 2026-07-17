@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Clouda Glue — Multi-Tenant Platform Build Plan v3</title>
+<style>
+  :root {
+    --bg:#fff; --fg:#1a1a1a; --muted:#5a5a5a; --border:#e2e2e2;
+    --code-bg:#f6f6f7; --accent:#0f6e56; --accent-bg:#e1f5ee;
+    --warn-bg:#faeeda; --warn-fg:#633806; --danger-bg:#fbeaea; --danger-fg:#801818;
+  }
+  body { font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif; color:var(--fg); background:var(--bg); max-width:1040px; margin:0 auto; padding:40px 24px 120px; line-height:1.65; }
+  h1 { font-size:30px; border-bottom:3px solid var(--accent); padding-bottom:14px; }
+  h2 { font-size:23px; margin-top:60px; padding-top:10px; border-top:1px solid var(--border); color:var(--accent); }
+  h3 { font-size:18px; margin-top:32px; }
+  h4 { font-size:14px; margin-top:24px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  p, li { font-size:15px; }
+  code { font-family:"SF Mono",Consolas,Menlo,monospace; font-size:13px; background:var(--code-bg); padding:2px 5px; border-radius:4px; }
+  pre { background:var(--code-bg); border:1px solid var(--border); border-radius:8px; padding:16px; overflow-x:auto; }
+  pre code { background:none; padding:0; font-size:12.5px; }
+  table { border-collapse:collapse; width:100%; margin:16px 0; font-size:14px; }
+  th, td { border:1px solid var(--border); padding:8px 10px; text-align:left; vertical-align:top; }
+  th { background:var(--code-bg); }
+  .note { background:var(--accent-bg); border-left:4px solid var(--accent); padding:10px 16px; border-radius:6px; margin:16px 0; font-size:14px; }
+  .warn { background:var(--warn-bg); border-left:4px solid #ba7517; padding:10px 16px; border-radius:6px; margin:16px 0; font-size:14px; color:var(--warn-fg); }
+  .danger { background:var(--danger-bg); border-left:4px solid var(--danger-fg); padding:10px 16px; border-radius:6px; margin:16px 0; font-size:14px; color:var(--danger-fg); }
+  .toc { background:var(--code-bg); border-radius:8px; padding:22px 30px; }
+  .toc a { color:var(--accent); text-decoration:none; }
+  .toc li { margin-bottom:4px; }
+  .repo-tag { display:inline-block; background:var(--accent); color:#fff; font-family:monospace; font-size:12px; padding:2px 8px; border-radius:4px; }
+  .tree { font-family:monospace; font-size:13px; white-space:pre; background:var(--code-bg); padding:16px; border-radius:8px; overflow-x:auto; }
+  hr { border:none; border-top:1px solid var(--border); margin:44px 0; }
+  .phase { border:1px solid var(--border); border-radius:8px; padding:16px 20px; margin:16px 0; }
+  .phase h4 { margin-top:0; color:var(--accent); }
+</style>
+</head>
+<body>
+
+<h1>Clouda Glue — Multi-Tenant Platform<br>Comprehensive Build Plan <span style="font-size:16px;color:var(--muted);">(v3)</span></h1>
+<p class="note">This is the complete, standalone build specification for the Glue platform. It is written to be the primary prompt handed to a developer or coding agent for generating every repo in the system. It assumes no prior context. The document is organized in three parts: <strong>Part A</strong> covers cross-cutting concerns (the seams where multi-repo systems typically fail), <strong>Part B</strong> covers each repo in dependency order, and <strong>Part C</strong> covers the concrete build/rollout sequence — the order the pieces get developed and how they connect as work progresses.</p>
+
+<div class="toc">
+<strong>Contents</strong>
+<p style="margin:8px 0 4px;font-weight:600;">Part A — Cross-cutting concerns</p>
+<ol>
+<li><a href="#summary">Executive summary</a></li>
+<li><a href="#goals">Goals &amp; non-goals</a></li>
+<li><a href="#topology">Repository topology &amp; communication graph</a></li>
+<li><a href="#deploy-atomicity">Deploy atomicity: single source of truth per tenant version</a></li>
+<li><a href="#schema-evolution">Schema evolution &amp; typed contracts</a></li>
+<li><a href="#cache">Cache semantics &amp; failure modes for <code>tenant_registry</code></a></li>
+<li><a href="#react-constraint">The shared React constraint</a></li>
+<li><a href="#publish-api">The publish API — first-class contract</a></li>
+<li><a href="#template-drift">Tenant template drift management</a></li>
+<li><a href="#federation-security">Federation remote as a trust boundary</a></li>
+<li><a href="#composer-sandbox">Composer style sandboxing</a></li>
+<li><a href="#shared-types">Shared types &amp; type flow</a></li>
+</ol>
+<p style="margin:8px 0 4px;font-weight:600;">Part B — Repos in dependency order</p>
+<ol start="13">
+<li><a href="#glue-types">glue-types — shared TypeScript contracts</a></li>
+<li><a href="#glue-components">glue-components — base UI library</a></li>
+<li><a href="#glue-data">glue-data — data access layer</a></li>
+<li><a href="#glue-services">glue-services — service layer</a></li>
+<li><a href="#glue-core">glue-core — framework package</a></li>
+<li><a href="#tenant-repo">Tenant repo — the deployed storefront</a></li>
+<li><a href="#glue-composer">glue-composer — headless CMS</a></li>
+<li><a href="#publish-service">publish-service — deployment coordinator</a></li>
+</ol>
+<p style="margin:8px 0 4px;font-weight:600;">Part C — Build sequence &amp; operations</p>
+<ol start="21">
+<li><a href="#build-phases">Build phases — order of development &amp; integration points</a></li>
+<li><a href="#local-dev">Local dev workflows</a></li>
+<li><a href="#cicd">CI/CD pipelines end-to-end</a></li>
+<li><a href="#versioning">Version strategy across all packages</a></li>
+<li><a href="#testing">Testing strategy</a></li>
+<li><a href="#observability">Observability &amp; failure UX</a></li>
+<li><a href="#onboarding">Tenant onboarding checklist</a></li>
+<li><a href="#appendix">Appendix: env vars, glossary</a></li>
+</ol>
+</div>
+
+<h2 id="summary">1. Executive summary</h2>
+<p>The platform is a multi-tenant e-commerce and content system split into a set of published packages plus one shared editor deployment. The shared packages carry no tenant-specific code. Each tenant gets its own repo, generated from a template, that <em>is</em> their deployed storefront — the same relationship a FastStore store has with <code>@faststore/core</code>. One additional application, the composer, is deployed once and serves every tenant as a visual CMS by loading each tenant's components dynamically at runtime via Module Federation.</p>
+<p>The two hardest problems in a system like this are not architectural, they are integration seams:</p>
+<ul>
+<li>Keeping the storefront's compiled code and the composer's dynamically-loaded view of that same tenant <strong>consistent</strong>, deploy after deploy.</li>
+<li>Keeping <strong>contracts</strong> (component prop schemas, TypeScript types, database shapes) synchronized as they evolve.</li>
+</ul>
+<p>Part A of this document addresses those seams explicitly. Parts B and C then specify each repo and the order to build them.</p>
+
+<h2 id="goals">2. Goals &amp; non-goals</h2>
+<h4>Goals</h4>
+<ul>
+<li>Tenants edit only their own repo — components, services, theme — and never the shared packages or other tenants' code.</li>
+<li><code>npm run dev</code> in a tenant repo starts that tenant's actual storefront locally with full hot reload.</li>
+<li>Tenants can use prebuilt components unmodified, restyle via tokens, or wrap them with extra markup/logic.</li>
+<li>Non-developers can edit page content and theme in the composer without triggering a redeploy of any tenant's app.</li>
+<li>The composer is one deployment serving every tenant, resolving each tenant's components and schemas dynamically.</li>
+<li>Shared packages are versioned strictly by semver, tested once, and consumed identically by every tenant.</li>
+</ul>
+<h4>Non-goals</h4>
+<ul>
+<li>No shared multi-tenant storefront deployment. Each tenant's storefront is its own deployment.</li>
+<li>No direct database access outside the <code>glue-data</code> interface, for any consumer.</li>
+<li>No cross-tenant component sharing outside the shared packages — a tenant cannot import another tenant's repo.</li>
+</ul>
+
+<h2 id="topology">3. Repository topology &amp; communication graph</h2>
+<div class="tree">┌──────────────────────────────────────────────────────────────┐
+│ PUBLISHED PACKAGES  (npm / AWS CodeArtifact, semver)          │
+│                                                                │
+│  glue-types       — shared TypeScript types                   │
+│  glue-components  — base UI components + schema.jsons        │
+│  glue-core         — renderer, theme, hooks, federation loader │
+│  glue-data         — tenant-scoped data access layer           │
+│  glue-services     — generic business logic + hook contract    │
+└──────────────────────────────────────────────────────────────┘
+        ▲ build-time npm imports                ▲ build-time npm imports
+        │                                         │
+┌───────┴──────────────────┐        ┌─────────────┴────────────────┐
+│ tenant-repo-acme          │        │ tenant-repo-globex             │
+│ IS Acme's live storefront │        │ IS Globex's live storefront    │
+│ Publishes remoteEntry.js  │────┐   │ Publishes remoteEntry.js  ─────┐
+│ (composer-only artifact)  │    │   │ (composer-only artifact)       │
+└──────────────┬────────────┘    │   └─────────────────────────────┬──┘
+               │                  │                                 │
+       ┌───────┴────────┐         │ runtime Module Federation      │
+       │ publish-service │◄────── CI updates ─────────────────────►│
+       │ (RPC endpoint)  │         │                                 │
+       └───────┬─────────┘         ▼                                 ▼
+               │           ┌────────────────────────────────────────────┐
+               ▼           │ glue-composer — deployed once, all tenants │
+    ┌────────────────────┐ │ loads each tenant's remoteEntry.js at      │
+    │  tenant_registry    │ │ runtime, builds schema-driven editor       │
+    │  (routing table)    │ └────────────────────────────────────────────┘
+    └────────────────────┘         ▲
+                                    │ reads
+                                    └── tenant_registry</div>
+<p>The registry table below is the definitive contract for who talks to whom, and when. Every mechanism in the rest of the document maps back to one of these edges.</p>
+<table>
+<tr><th>From</th><th>To</th><th>Mechanism</th><th>Resolved</th></tr>
+<tr><td>tenant-repo</td><td>glue-{types,core,components,data,services}</td><td>npm dep, direct import</td><td>Build time</td></tr>
+<tr><td>glue-core</td><td>glue-{types,components,data}</td><td>npm peer/dep</td><td>Build time</td></tr>
+<tr><td>tenant-repo CI</td><td>publish-service</td><td>Signed HTTP RPC (§8)</td><td>Deploy time</td></tr>
+<tr><td>publish-service</td><td>tenant_registry</td><td>DB write, single row</td><td>Deploy time</td></tr>
+<tr><td>Storefront runtime</td><td>tenant_registry</td><td>glue-data query, own slug (cached)</td><td>Every request (§6)</td></tr>
+<tr><td>Storefront runtime</td><td>Composer webhook</td><td>Inbound cache invalidation</td><td>On composer save</td></tr>
+<tr><td>glue-composer</td><td>tenant_registry</td><td>glue-data query, all rows visible to session</td><td>Per request (cached)</td></tr>
+<tr><td>glue-composer</td><td>Tenant's remoteEntry.js</td><td>Module Federation runtime, SRI-verified (§10)</td><td>Runtime, per selected tenant</td></tr>
+</table>
+
+<hr>
+
+<h2 id="deploy-atomicity">4. Deploy atomicity: single source of truth per tenant version</h2>
+<p><strong>Problem this addresses.</strong> The storefront is built from <code>src/components/index.ts</code>. The composer sees the tenant via <code>src/federation/expose-components.ts</code>. If these two artifacts are built at different commits, the composer offers components the storefront can't render, or renders props against a schema the storefront doesn't understand.</p>
+<h4>Design</h4>
+<ol>
+<li><code>src/federation/expose-components.ts</code> is a one-line re-export of <code>src/components/index.ts</code>. It is enforced by an ESLint rule in the tenant repo template — any deviation fails CI.</li>
+<li>The tenant CI pipeline is a single atomic job with three outputs from the same commit SHA: (a) the deployed storefront, (b) the <code>remoteEntry.js</code> bundle at <code>cdn.clouda.io/tenants/&lt;slug&gt;/&lt;sha&gt;/</code>, (c) a manifest describing what was built.</li>
+<li><code>tenant_registry</code> records <code>deployedCommit</code> (SHA), <code>remoteEntryUrl</code> (points to <code>&lt;sha&gt;/</code>), <code>remoteEntryIntegrity</code> (SRI hash), and <code>version</code> (human-readable). Only <code>publish-service</code> writes this row — never CI directly.</li>
+<li>The storefront's <code>app/layout.tsx</code> logs a warning at boot if <code>process.env.BUILD_COMMIT !== (await getTenantFromRegistry(slug)).deployedCommit</code>. This catches drift within seconds of a broken deploy.</li>
+<li>Rollback is a first-class operation on <code>publish-service</code>: point <code>tenant_registry</code> at a prior <code>&lt;sha&gt;/</code> that still exists on the CDN. Composer switches to the older components; the tenant separately redeploys the storefront at that SHA. The two steps do not have to happen atomically — the storefront and composer converge back to consistency once both are pointed at the same SHA.</li>
+</ol>
+<pre><code>// tenant-repo/.eslintrc.js — enforced structurally
+module.exports = {
+  rules: {
+    'clouda/federation-must-reexport-components': 'error', // custom rule from a shared config
+  },
+};
+
+// tenant-repo/src/federation/expose-components.ts — the ONLY permitted contents
+export { default } from '../components';
+</code></pre>
+
+<h2 id="schema-evolution">5. Schema evolution &amp; typed contracts</h2>
+<p><strong>Problem this addresses.</strong> Each component ships a <code>schema.json</code>. Composer validates page props against it, generates the editor UI from it, and (implicitly) tenant devs write component code that reads matching props. If a tenant renames a prop, existing page documents in the DB still carry the old name — the storefront breaks on the next request.</p>
+<h4>Design — additive-only, with generated types</h4>
+<ol>
+<li><strong>Additive-only rule.</strong> Fields may be added or deprecated, never renamed or removed. A CI check diffs each PR's schemas against the last built version and fails on removal/rename.</li>
+<li><strong>Deprecation flow.</strong> A field is marked <code>"x-deprecated": true</code> with an optional <code>"x-replacedBy"</code>. Composer hides deprecated fields in the editor but still lets the storefront read them. A migration script (in <code>glue-services</code>) can be run out-of-band by the platform team to rewrite existing page docs — this is explicit, never automatic.</li>
+<li><strong>Types are generated, not hand-written.</strong> A build step in the tenant repo runs <code>json-schema-to-typescript</code> against every <code>schema.json</code> and writes types to <code>src/components/generated/props.d.ts</code>. Tenant component code imports these types, so the component's TypeScript definition and the composer's validation contract cannot drift.</li>
+<li><strong>Publish-time double-check.</strong> When composer saves a page, <code>publishPage()</code> validates props against schema (as before). Additionally, the storefront's render function tolerates unknown extra props (drops them) but logs a warning — this prevents a stale composer view from taking down the site during the window between a component removal and its rollout.</li>
+</ol>
+<pre><code>// package.json script the tenant template runs before every build/dev
+"scripts": {
+  "generate:types": "node scripts/schemas-to-types.mjs",
+  "prebuild": "npm run generate:types",
+  "predev":    "npm run generate:types"
+}
+</code></pre>
+<pre><code>// tenant-repo/src/components/Hero/index.tsx
+import type { HeroProps } from '../generated/props';
+export default function Hero(props: HeroProps) { /* ... */ }
+</code></pre>
+
+<h2 id="cache">6. Cache semantics &amp; failure modes for <code>tenant_registry</code></h2>
+<p><strong>Problem this addresses.</strong> The plan says "cached, short TTL" without specifying where the cache lives, how invalidation works, or what happens when the registry is unreachable. Those decisions have real product consequences (how long after a marketer clicks Save do their edits appear).</p>
+<h4>Design</h4>
+<ol>
+<li><strong>Cache layers.</strong> Per-instance in-memory cache (LRU, 30-second TTL) in front of the tenant_registry DB. Not Redis — the registry is small enough that per-instance memory is fine and one fewer dependency to run.</li>
+<li><strong>Eager invalidation.</strong> When composer writes <code>themeOverrides</code> for a tenant, it POSTs to the tenant's storefront at <code>/_internal/invalidate</code> with the tenant slug and an HMAC signature verifying it came from composer. The storefront invalidates its cache immediately and re-fetches on next request. Signature keys live in shared secrets between composer and the tenant's env.</li>
+<li><strong>Product SLO.</strong> "Composer changes visible within 5 seconds under normal operation; within 30 seconds if webhook delivery fails." This is documented and testable.</li>
+<li><strong>Stale-if-error.</strong> If a request comes in and the cache is empty and <code>tenant_registry</code> is unreachable, the storefront serves stale data from an on-disk fallback snapshot written each time the cache successfully refreshes. Better a slightly-stale page than a 500. The composer, in contrast, fails closed — an editor should not save against a stale registry view.</li>
+</ol>
+<pre><code>// packages/glue-data/src/tenant-registry-cache.ts
+import LRU from 'lru-cache';
+const cache = new LRU&lt;string, TenantRow&gt;({ max: 200, ttl: 30_000 });
+
+export async function getTenantFromRegistry(slug: string): Promise&lt;TenantRow&gt; {
+  const cached = cache.get(slug);
+  if (cached) return cached;
+  try {
+    const row = await fetchFromDb(slug);
+    cache.set(slug, row);
+    await writeFallbackSnapshot(slug, row); // storefront-only
+    return row;
+  } catch (err) {
+    const fallback = await readFallbackSnapshot(slug);
+    if (fallback) { logStaleServed(slug, err); return fallback; }
+    throw err;
+  }
+}
+
+export function invalidateTenant(slug: string) { cache.delete(slug); }
+</code></pre>
+<pre><code>// tenant-repo/app/_internal/invalidate/route.ts
+import { invalidateTenant } from '@clouda-inc/glue-data';
+import { verifyComposerHmac } from '@clouda-inc/glue-services';
+
+export async function POST(req: Request) {
+  if (!verifyComposerHmac(req)) return new Response('forbidden', { status: 403 });
+  const { slug } = await req.json();
+  invalidateTenant(slug);
+  return Response.json({ ok: true });
+}
+</code></pre>
+
+<h2 id="react-constraint">7. The shared React constraint</h2>
+<p><strong>Problem this addresses.</strong> Composer loads multiple tenants' remotes into one host at runtime. Module Federation's singleton behavior only works if every remote agrees on React's major version and shared config. This is a genuine limit on tenant independence and must be stated openly.</p>
+<h4>Design</h4>
+<ol>
+<li><code>glue-composer</code>'s <code>package.json</code> declares the supported React major (currently 18). This is the platform's compatibility promise for the current cycle.</li>
+<li>Tenant repo template pins <code>react</code> and <code>react-dom</code> to the exact minor the platform team blesses (e.g. <code>18.3.1</code>), not a caret range.</li>
+<li>The tenant CI includes a shared lint step from <code>@clouda-inc/tenant-ci-config</code> that fails the build if the pinned React version drifts from the platform's supported version.</li>
+<li>A React major upgrade is a coordinated platform event: composer + all tenant templates bump together. The bump-all mechanism from §24 exists partly to make this operable.</li>
+</ol>
+<div class="warn">This is a real constraint on tenant autonomy. Document it in the tenant developer onboarding docs, not just this build plan.</div>
+
+<h2 id="publish-api">8. The publish API — first-class contract</h2>
+<p><strong>Problem this addresses.</strong> Multiple sections mention "the internal publish API." It is the single most security-sensitive integration point (tenant CI touches shared infrastructure) and was previously undefined. This section is its complete spec.</p>
+<h4>Endpoint</h4>
+<p><code>POST https://publish.clouda.io/v1/tenants/&lt;slug&gt;/versions</code></p>
+<h4>Auth</h4>
+<ol>
+<li>Each tenant repo, at creation, is issued a signing keypair. The private key lives in that repo's CI secrets store, scoped to the repo.</li>
+<li>Requests carry a short-lived JWT signed with the private key: subject is the tenant slug, issued-at within the last 5 minutes, audience is <code>publish.clouda.io</code>.</li>
+<li><code>publish-service</code> verifies the JWT against the public key registered in <code>tenant_registry</code> at repo-creation time. A mismatch or a signature over a different slug is rejected.</li>
+</ol>
+<h4>Request</h4>
+<pre><code>{
+  "commit": "9a7f2c1b...",
+  "version": "v42",
+  "remoteEntryUrl": "https://cdn.clouda.io/tenants/acme/9a7f2c1b/remoteEntry.js",
+  "remoteEntryIntegrity": "sha384-...",   // SRI hash, computed by CI
+  "glueCoreVersion": "2.3.1",
+  "storefrontUrl": "https://acme.com",     // where the storefront was deployed
+  "idempotencyKey": "9a7f2c1b-abc123"       // safe to retry
+}
+</code></pre>
+<h4>Behavior</h4>
+<ol>
+<li><strong>Idempotency</strong>: same key returns 200 with the prior result; no double-write.</li>
+<li><strong>Verification</strong>: publish-service HEAD-checks <code>remoteEntryUrl</code> exists on the CDN and re-computes the SRI hash to confirm it matches. If either fails, respond 422 — the tenant's storefront deploy is not rolled back, but composer keeps pointing at the previous version.</li>
+<li><strong>Registry update</strong>: single atomic write of <code>deployedCommit</code>, <code>remoteEntryUrl</code>, <code>remoteEntryIntegrity</code>, <code>version</code>, <code>glueCoreVersion</code>.</li>
+<li><strong>Response</strong>: 200 with <code>{ ok: true, previous: {...} }</code> so the tenant CI can log the previous state for its own rollback command.</li>
+</ol>
+<h4>Rollback</h4>
+<p><code>POST /v1/tenants/&lt;slug&gt;/rollback</code> with <code>{ "toCommit": "..." }</code>. Requires the same JWT auth. Rejects if the target commit's <code>remoteEntry.js</code> no longer exists on the CDN (retention keeps the last 10 versions).</p>
+<h4>Partial-failure story</h4>
+<p>If CDN upload succeeds but the publish-service call fails, the tenant CI retries with the same idempotency key. If publish-service succeeds but the storefront deploy step later fails, the tenant re-runs the storefront deploy at the same commit — composer is already correctly pointed. If the storefront deploys but CDN upload fails, publish-service rejects the call and composer keeps showing the prior tenant version; storefront is running new code composer can't edit for. This is the least-bad failure mode and is <em>eventually consistent</em> once the tenant CI retries the CDN step.</p>
+
+<h2 id="template-drift">9. Tenant template drift management</h2>
+<p><strong>Problem this addresses.</strong> Every tenant repo starts from a template. Six months in, the template evolves (new lint rule, new federation config, new env var). Tenants have modified files the template also modifies. Merging updates is a real problem, distinct from bumping npm dependencies.</p>
+<h4>Design</h4>
+<ol>
+<li>The tenant template is a <a href="https://copier.readthedocs.io/">Copier</a> template (or <a href="https://cruft.readthedocs.io/">Cruft</a>, if the team prefers Python-free tooling — pick one, use everywhere).</li>
+<li>Each generated tenant repo has a <code>.copier-answers.yml</code> committed at generation, recording the template version.</li>
+<li>A scheduled workflow (weekly) runs <code>copier update</code> against every tenant repo, opening a PR with the diff. The tenant's own CI tests the PR; the tenant merges when convenient. Conflicts are resolved by the tenant, not by the platform team.</li>
+<li>The platform team maintains a compatibility matrix: <em>template versions &lt; X are considered unsupported</em>. Tenants below the floor get a nudge from the platform team; the floor moves forward roughly quarterly.</li>
+<li>Files the template owns exclusively (federation config, tenant CI config re-export) are marked in <code>copier.yml</code> as <code>keep_upstream: true</code> — the update always wins, and the tenant is expected not to edit these.</li>
+</ol>
+
+<h2 id="federation-security">10. Federation remote as a trust boundary</h2>
+<p><strong>Problem this addresses.</strong> Composer loads and executes JS from <code>tenant_registry.remoteEntryUrl</code>. Whoever can write that field, or compromise the CDN path, gets code execution inside composer with cross-tenant edit access. This must be treated as a real trust boundary, not a "consider adding SRI later" note.</p>
+<h4>Design</h4>
+<ol>
+<li>Tenant CI computes an SRI hash (<code>sha384</code>) over the built <code>remoteEntry.js</code> in a trusted GitHub Actions environment.</li>
+<li>The hash is sent to <code>publish-service</code> as part of the publish request (§8) and stored in <code>tenant_registry.remoteEntryIntegrity</code>.</li>
+<li>Composer's federation loader fetches the remote and verifies its content matches the stored SRI hash before evaluating. Mismatch → refuse to load, alert, show the editor a "this tenant's build is untrusted" error state.</li>
+<li>CDN bucket write permissions are scoped per-tenant path via IAM: tenant-A's CI can only write to <code>/tenants/acme/</code>. This prevents a compromised tenant from replacing another tenant's <code>remoteEntry.js</code>.</li>
+<li>Composer runs each tenant's loaded module inside an isolated realm where practical, though realistically the primary defense is the SRI check — realm isolation in the browser has limits.</li>
+</ol>
+<pre><code>// glue-core/src/composer-registry.ts
+export async function getTenantComponentRegistryForComposer(tenantSlug: string) {
+  const tenant = await getTenantFromRegistry(tenantSlug);
+
+  const resp = await fetch(tenant.remoteEntryUrl, { integrity: tenant.remoteEntryIntegrity });
+  if (!resp.ok) throw new UntrustedRemoteError(tenantSlug);
+  // ... proceed with @module-federation/runtime init + loadRemote
+}
+</code></pre>
+
+<h2 id="composer-sandbox">11. Composer style sandboxing</h2>
+<p><strong>Problem this addresses.</strong> Tenant components declare CSS variables on <code>:root</code>. If composer renders tenant components inline, the tenant's global styles leak into composer's own chrome (its sidebar, toolbar, modals get tenant-colored).</p>
+<h4>Design</h4>
+<ol>
+<li>Composer renders tenant components inside an iframe with a fresh document. The iframe hosts its own React tree that consumes the loaded remote. This gives real style isolation, plus a natural boundary if a tenant component crashes.</li>
+<li>Communication between composer's outer app (drag/drop, prop panel) and the iframe (rendered preview) goes over <code>postMessage</code> with a typed protocol defined in <code>glue-types</code>.</li>
+<li>The iframe URL is same-origin to composer for cookie/auth reasons; the isolation is document-level, not origin-level.</li>
+</ol>
+
+<h2 id="shared-types">12. Shared types &amp; type flow</h2>
+<p><strong>Problem this addresses.</strong> Types like <code>PageSection</code>, <code>Cart</code>, <code>Order</code>, <code>TenantRow</code>, and the composer↔iframe message protocol appeared implicitly in prior versions. Without one owning package they drift.</p>
+<h4>Design</h4>
+<p>Introduce <span class="repo-tag">glue-types</span> as the base package everything depends on. It contains only type declarations and shared JSON Schema definitions — no runtime code. Every other package peer-depends on it. Bumping <code>glue-types</code> is the only way a shared shape changes; this makes drift structurally visible in <code>package.json</code>s.</p>
+
+<hr>
+
+<h2 id="glue-types">13. <span class="repo-tag">glue-types</span> — shared TypeScript contracts</h2>
+<div class="tree">glue-types/
+├── src/
+│   ├── index.ts
+│   ├── page.ts            ← PageSection, PageDraft, PublishedPage
+│   ├── commerce.ts         ← Cart, Order, LineItem
+│   ├── tenant.ts           ← TenantRow, TenantIsolationMode
+│   ├── component.ts        ← ComponentRegistry, ComponentEntry
+│   └── composer-protocol.ts ← ComposerToPreviewMsg, PreviewToComposerMsg
+├── package.json
+</div>
+<pre><code>// src/page.ts
+export interface PageSection {
+  id: string;
+  componentType: string;
+  props: Record&lt;string, unknown&gt;;
+}
+export interface PageDraft { path: string; sections: PageSection[]; }
+export interface PublishedPage extends PageDraft { publishedAt: string; }
+
+// src/tenant.ts
+export type TenantIsolationMode = 'db-per-tenant' | 'shared-db';
+export interface TenantRow {
+  slug: string;
+  deployedCommit: string;
+  remoteEntryUrl: string;
+  remoteEntryIntegrity: string;
+  version: string;
+  glueCoreVersion: string;
+  isolationMode: TenantIsolationMode;
+  dbConnectionRef: string;
+  themeOverrides: Record&lt;string, string&gt;;
+  domains: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// src/component.ts
+export interface ComponentEntry { component: React.ComponentType&lt;any&gt;; schema: object | null; }
+export type ComponentRegistry = Record&lt;string, ComponentEntry&gt;;
+</code></pre>
+
+<h2 id="glue-components">14. <span class="repo-tag">glue-components</span> — base UI library</h2>
+<div class="tree">glue-components/
+├── src/
+│   ├── Button/{index.tsx, schema.json}
+│   ├── Hero/{index.tsx, schema.json}
+│   ├── ProductCard/{index.tsx, schema.json}
+│   ├── theme.css              ← default CSS variable definitions
+│   └── index.ts                ← barrel export
+├── scripts/validate-schemas.mjs ← Ajv meta-schema check in CI
+├── package.json
+</div>
+<pre><code>// src/Button/schema.json
+{
+  "title": "Button",
+  "type": "object",
+  "properties": {
+    "label":   { "type": "string", "title": "Label" },
+    "href":    { "type": "string", "title": "Link", "format": "uri" },
+    "variant": { "type": "string", "title": "Style", "enum": ["primary", "secondary", "ghost"] }
+  },
+  "required": ["label"]
+}
+</code></pre>
+
+<h2 id="glue-data">15. <span class="repo-tag">glue-data</span> — data access layer</h2>
+<pre><code>// src/db.ts — tenant-scoped by construction
+import type { TenantRow } from '@clouda-inc/glue-types';
+
+export async function getTenantDb(tenantSlug: string) {
+  const tenant = await getTenantFromRegistry(tenantSlug);
+  if (tenant.isolationMode === 'db-per-tenant') {
+    const conn = await getConnection(tenant.dbConnectionRef);
+    return {
+      find:   (c: string, q: object)             =&gt; conn.collection(c).find(q).toArray(),
+      insert: (c: string, doc: object)           =&gt; conn.collection(c).insertOne(doc),
+      update: (c: string, q: object, p: object)  =&gt; conn.collection(c).updateOne(q, { $set: p }),
+    };
+  }
+  const conn = await getSharedConnection();
+  return {
+    find:   (c, q)    =&gt; conn.collection(c).find({ ...q, tenantId: tenant.slug }).toArray(),
+    insert: (c, doc)  =&gt; conn.collection(c).insertOne({ ...doc, tenantId: tenant.slug }),
+    update: (c, q, p) =&gt; conn.collection(c).updateOne({ ...q, tenantId: tenant.slug }, { $set: p }),
+  };
+}
+</code></pre>
+<pre><code>// src/tenant-registry.ts — cursor-paginated listing
+export async function listTenants(cursor?: string, limit = 50) {
+  const conn = await getRegistryConnection();
+  const q = cursor ? { slug: { $gt: cursor } } : {};
+  const rows = await conn.collection('tenant_registry').find(q).sort({ slug: 1 }).limit(limit).toArray();
+  return { rows, nextCursor: rows.length === limit ? rows[rows.length - 1].slug : null };
+}
+</code></pre>
+<div class="danger"><strong>DB isolation choice is not cheaply reversible.</strong> Migrating from shared-DB-with-discriminator to DB-per-tenant later is enormously expensive once real data is in shared collections. Default recommendation: <strong>DB-per-tenant</strong>. Only choose shared-DB if you have a specific reason and low tenant count where the operational cost of many DBs matters more than isolation.</div>
+
+<h2 id="glue-services">16. <span class="repo-tag">glue-services</span> — service layer &amp; hook contract</h2>
+<pre><code>// src/checkout.ts
+import type { Cart, Order } from '@clouda-inc/glue-types';
+export function createCheckoutHandler(hooks: {
+  beforePriceCalculation?: (c: Cart) =&gt; Promise&lt;Cart&gt;;
+  afterOrderCreated?:      (o: Order) =&gt; Promise&lt;void&gt;;
+} = {}) {
+  return async (req: Request) =&gt; {
+    let cart = await parseCart(req);
+    if (hooks.beforePriceCalculation) cart = await hooks.beforePriceCalculation(cart);
+    const order = await createOrder(cart);
+    if (hooks.afterOrderCreated) await hooks.afterOrderCreated(order);
+    return Response.json(order);
+  };
+}
+</code></pre>
+<pre><code>// src/publish.ts
+import Ajv from 'ajv';
+import type { PageDraft, ComponentRegistry } from '@clouda-inc/glue-types';
+const ajv = new Ajv({ removeAdditional: 'failing' });
+
+export async function publishPage(tenantSlug: string, page: PageDraft, registry: ComponentRegistry) {
+  for (const section of page.sections) {
+    const schema = registry[section.componentType]?.schema;
+    if (schema &amp;&amp; !ajv.validate(schema, section.props)) {
+      throw new ValidationError(section.componentType, ajv.errors);
+    }
+  }
+  const db = await getTenantDb(tenantSlug);
+  return db.update('pages', { path: page.path }, page);
+}
+
+export function verifyComposerHmac(req: Request): boolean { /* HMAC over slug + timestamp */ }
+</code></pre>
+
+<h2 id="glue-core">17. <span class="repo-tag">glue-core</span> — framework package</h2>
+<pre><code>// src/renderer.tsx
+import type { ComponentRegistry, PageSection } from '@clouda-inc/glue-types';
+
+export function SectionRenderer({ sections, registry }: { sections: PageSection[]; registry: ComponentRegistry }) {
+  return (
+    &lt;&gt;
+      {sections.map((section) =&gt; {
+        const entry = registry[section.componentType];
+        if (!entry) return null; // tolerate unknown types — see §5
+        const Component = entry.component;
+        // filter known props via schema if present (drop unknowns, log)
+        const props = entry.schema ? filterKnownProps(section.props, entry.schema) : section.props;
+        return &lt;Component key={section.id} {...props} /&gt;;
+      })}
+    &lt;/&gt;
+  );
+}
+</code></pre>
+<pre><code>// src/theme.ts
+import baseTokens from '@clouda-inc/glue-components/theme.json';
+import { getTenantFromRegistry } from '@clouda-inc/glue-data';
+
+export async function resolveTheme(tenantSlug: string, tenantTokens: Record&lt;string, string&gt;) {
+  const tenant = await getTenantFromRegistry(tenantSlug);
+  return { ...baseTokens, ...tenantTokens, ...tenant.themeOverrides };
+}
+</code></pre>
+<pre><code>// src/composer-registry.ts — SRI-verified federation loader (composer-only)
+import { init, loadRemote } from '@module-federation/runtime';
+import { getTenantFromRegistry } from '@clouda-inc/glue-data';
+
+const initialized = new Set&lt;string&gt;();
+
+export async function getTenantComponentRegistryForComposer(tenantSlug: string) {
+  const tenant = await getTenantFromRegistry(tenantSlug);
+
+  // SRI verification before any code is executed
+  const resp = await fetch(tenant.remoteEntryUrl, { integrity: tenant.remoteEntryIntegrity });
+  if (!resp.ok) throw new UntrustedRemoteError(tenantSlug);
+
+  const remoteName = `tenant_${tenantSlug}`;
+  if (!initialized.has(remoteName)) {
+    init({ name: 'glue_composer_host', remotes: [{ name: remoteName, entry: tenant.remoteEntryUrl }] });
+    initialized.add(remoteName);
+  }
+  const mod = await loadRemote&lt;{ default: any }&gt;(`${remoteName}/components`);
+  return mod.default;
+}
+</code></pre>
+
+<h2 id="tenant-repo">18. <span class="repo-tag">tenant-repo-&lt;slug&gt;</span> — deployed storefront</h2>
+<div class="tree">tenant-repo-acme/
+├── .copier-answers.yml
+├── app/
+│   ├── layout.tsx                 ← theme injection + BUILD_COMMIT drift warning
+│   ├── [...slug]/page.tsx         ← calls glue-core SectionRenderer
+│   └── _internal/invalidate/route.ts ← HMAC-verified cache buster (§6)
+├── src/
+│   ├── components/
+│   │   ├── generated/props.d.ts   ← generated from schema.jsons at prebuild
+│   │   ├── Hero/{index.tsx, schema.json}
+│   │   ├── ProductCard/{index.tsx, schema.json}
+│   │   └── index.ts               ← local registry — used by both app and remote
+│   ├── services/api/checkout/route.ts
+│   ├── theme/{tokens.json, theme.css}
+│   └── federation/expose-components.ts ← MUST re-export ../components only
+├── scripts/schemas-to-types.mjs
+├── next.config.js                  ← ModuleFederationPlugin, expose-only
+├── tenant.config.json
+├── .env.local
+└── package.json
+</div>
+<pre><code>// app/[...slug]/page.tsx
+import { SectionRenderer, getPageData, resolveTheme } from '@clouda-inc/glue-core';
+import registry from '../../src/components';
+import tokens from '../../src/theme/tokens.json';
+
+export default async function Page({ params }: { params: { slug: string[] } }) {
+  const slug = process.env.TENANT_SLUG!;
+  const [pageData, theme] = await Promise.all([
+    getPageData(slug, params.slug.join('/')),
+    resolveTheme(slug, tokens),
+  ]);
+  return (
+    &lt;&gt;
+      &lt;style dangerouslySetInnerHTML={{ __html: cssVarsFrom(theme) }} /&gt;
+      &lt;SectionRenderer sections={pageData.sections} registry={registry} /&gt;
+    &lt;/&gt;
+  );
+}
+</code></pre>
+<pre><code>// app/layout.tsx — build-commit drift check
+import { getTenantFromRegistry } from '@clouda-inc/glue-data';
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const slug = process.env.TENANT_SLUG!;
+  const tenant = await getTenantFromRegistry(slug);
+  if (tenant.deployedCommit !== process.env.BUILD_COMMIT) {
+    console.warn(`[glue] build-commit drift: running ${process.env.BUILD_COMMIT}, registry ${tenant.deployedCommit}`);
+  }
+  return &lt;html&gt;&lt;body&gt;{children}&lt;/body&gt;&lt;/html&gt;;
+}
+</code></pre>
+<pre><code>// next.config.js
+const { ModuleFederationPlugin } = require('@module-federation/enhanced/webpack');
+module.exports = {
+  webpack(config) {
+    config.plugins.push(new ModuleFederationPlugin({
+      name: process.env.TENANT_FEDERATION_NAME,
+      filename: 'static/chunks/remoteEntry.js',
+      exposes: { './components': './src/federation/expose-components.ts' },
+      shared: {
+        react:      { singleton: true, requiredVersion: '18.3.1' },
+        'react-dom':{ singleton: true, requiredVersion: '18.3.1' },
+      },
+    }));
+    return config; // NO host "remotes" config — this app is not a host
+  },
+};
+</code></pre>
+
+<h2 id="glue-composer">19. <span class="repo-tag">glue-composer</span> — headless CMS</h2>
+<div class="tree">glue-composer/
+├── app/
+│   ├── tenants/page.tsx                  ← lists tenants scoped to session
+│   ├── tenants/[slug]/editor/page.tsx    ← outer editor UI
+│   └── tenants/[slug]/preview/page.tsx   ← rendered inside iframe
+├── src/
+│   ├── ComponentPicker.tsx
+│   ├── PropEditor.tsx
+│   ├── PageBuilder.tsx
+│   └── preview-bridge.ts                  ← typed postMessage protocol
+├── next.config.js
+├── package.json
+</div>
+<pre><code>// app/tenants/[slug]/editor/page.tsx — outer chrome, embeds preview iframe
+export default function Editor({ params }: { params: { slug: string }}) {
+  return (
+    &lt;div className="composer-shell"&gt;
+      &lt;ComponentPicker tenantSlug={params.slug} /&gt;
+      &lt;iframe src={`/tenants/${params.slug}/preview`} title="preview" /&gt;
+      &lt;PropEditor /&gt;
+    &lt;/div&gt;
+  );
+}
+</code></pre>
+<pre><code>// app/tenants/[slug]/preview/page.tsx — inside iframe, renders tenant components
+import { getTenantComponentRegistryForComposer, SectionRenderer } from '@clouda-inc/glue-core';
+
+export default async function Preview({ params }: { params: { slug: string }}) {
+  const registry = await getTenantComponentRegistryForComposer(params.slug);
+  const draft = await loadDraftFromSession(params.slug);
+  return &lt;SectionRenderer sections={draft.sections} registry={registry} /&gt;;
+}
+</code></pre>
+<pre><code>// src/preview-bridge.ts — outer ↔ iframe messaging, types from glue-types
+import type { ComposerToPreviewMsg, PreviewToComposerMsg } from '@clouda-inc/glue-types';
+export function sendToPreview(iframe: HTMLIFrameElement, msg: ComposerToPreviewMsg) {
+  iframe.contentWindow?.postMessage(msg, window.location.origin);
+}
+</code></pre>
+
+<h2 id="publish-service">20. <span class="repo-tag">publish-service</span> — deployment coordinator</h2>
+<p>A small HTTP service (Node/Fastify or similar) that owns all writes to <code>tenant_registry</code>. Deployed once. See §8 for its API contract. Its only responsibilities:</p>
+<ol>
+<li>Verify per-tenant JWT auth against public keys in tenant_registry.</li>
+<li>HEAD-check the remoteEntry URL exists and re-verify SRI hash.</li>
+<li>Idempotent atomic write of the tenant row.</li>
+<li>Emit a webhook to composer + the tenant's storefront on successful update, so caches invalidate eagerly.</li>
+</ol>
+<p>Keeping this as a separate service — rather than letting CI write the registry directly — is what makes point 3 of §4 (deploy atomicity), points 1–4 of §8 (auth, verification, idempotency, atomicity), and §10 (SRI enforcement) all enforceable in one place. It is small but architecturally load-bearing.</p>
+
+<hr>
+
+<h2 id="build-phases">21. Build phases — order of development &amp; integration points</h2>
+<p>This section is the sequencing guide. Build in this order so that each phase produces something integratable and testable before the next begins. Skipping ahead — or building repos in isolation and integrating at the end — is what causes multi-repo systems to melt down at integration time.</p>
+
+<div class="phase">
+<h4>Phase 1 — Type foundation (1–2 days)</h4>
+<p><strong>Build:</strong> <code>glue-types</code> repo with initial types (PageSection, TenantRow, Cart/Order, ComponentRegistry, composer-preview protocol). Publish 0.1.0 to CodeArtifact.</p>
+<p><strong>Why first:</strong> everything else imports these. Getting them wrong forces re-work across every downstream repo.</p>
+<p><strong>Done when:</strong> package publishes, has a README documenting each exported type, and downstream repos can install it.</p>
+</div>
+
+<div class="phase">
+<h4>Phase 2 — Data layer (2–3 days)</h4>
+<p><strong>Build:</strong> <code>glue-data</code> with <code>getTenantDb</code>, <code>getTenantFromRegistry</code>, the LRU cache with stale-if-error, and a working <code>tenant_registry</code> DB schema. Ship both isolation modes behind the same interface.</p>
+<p><strong>Integration point:</strong> integration tests boot against a real (dockerised) database and assert that queries against a missing tenant fail closed. Cache invalidation is unit-tested against a mock DB.</p>
+<p><strong>Done when:</strong> a test can insert a tenant row, query for it, invalidate, and re-read.</p>
+</div>
+
+<div class="phase">
+<h4>Phase 3 — Base UI + component contract (3–5 days)</h4>
+<p><strong>Build:</strong> <code>glue-components</code> with 5–10 base components, each with schema.json. Include the CI meta-schema validator. Include <code>theme.css</code> and <code>theme.json</code>.</p>
+<p><strong>Integration point:</strong> writing a downstream test app that imports <code>glue-components</code>, renders a Button, and applies a theme override to verify the CSS variable pipeline works.</p>
+</div>
+
+<div class="phase">
+<h4>Phase 4 — Framework package (3–5 days)</h4>
+<p><strong>Build:</strong> <code>glue-core</code> with SectionRenderer, resolveTheme, and page-data hooks. Defer the composer-registry / federation loader piece to Phase 8 (composer needs it, tenant apps do not).</p>
+<p><strong>Integration point:</strong> a throwaway test app that imports glue-core, passes it a hand-built registry, and renders a fixed page. This proves the tenant-app pattern before any tenant exists.</p>
+</div>
+
+<div class="phase">
+<h4>Phase 5 — Service layer (2–4 days)</h4>
+<p><strong>Build:</strong> <code>glue-services</code> with <code>createCheckoutHandler</code>, <code>publishPage</code> (with Ajv validation), <code>verifyComposerHmac</code>. Depends on glue-data (Phase 2).</p>
+<p><strong>Integration point:</strong> integration test where a page draft with a schema violation is rejected and one that passes writes to the DB successfully.</p>
+</div>
+
+<div class="phase">
+<h4>Phase 6 — publish-service (2–3 days)</h4>
+<p><strong>Build:</strong> the small HTTP service specified in §20, with JWT auth, idempotency, SRI verification against a real CDN bucket, and atomic registry writes. Deploy a staging instance.</p>
+<p><strong>Integration point:</strong> a scripted end-to-end test that uploads a fake remoteEntry.js to CDN, POSTs a publish request, verifies the row is written, and rejects a second call with the same idempotency key.</p>
+</div>
+
+<div class="phase">
+<h4>Phase 7 — Tenant template (5–7 days)</h4>
+<p><strong>Build:</strong> the Copier/Cruft template producing a tenant repo, including: schemas-to-types generator, ESLint config with the federation-reexport rule, tenant-CI-config, prod build scripts, the invalidate route, sample components (Hero, ProductCard), federation config.</p>
+<p><strong>Integration point:</strong> generate one throwaway tenant repo from the template, run <code>npm run dev</code>, watch a fully working storefront render locally against a seeded database. This is the first true end-to-end integration of everything built so far.</p>
+<p><strong>Critical:</strong> do not proceed past this phase until <code>npm run dev</code> gives instant HMR on a component change. If it doesn't, something is wrong that the rest of the plan will amplify.</p>
+</div>
+
+<div class="phase">
+<h4>Phase 8 — Composer (7–10 days)</h4>
+<p><strong>Build:</strong> add the composer-registry loader to <code>glue-core</code> (this was deferred from Phase 4). Build <code>glue-composer</code>: tenant picker, iframe-sandboxed preview, drag-drop page builder, schema-driven prop editor, save flow calling <code>publishPage</code>.</p>
+<p><strong>Integration point:</strong> deploy the Phase 7 tenant's remoteEntry.js to CDN, call publish-service, open composer, load the tenant, edit a page, save, refresh the storefront and see the change. This is the second full-system integration test.</p>
+</div>
+
+<div class="phase">
+<h4>Phase 9 — Second tenant + drift check (2–3 days)</h4>
+<p><strong>Build:</strong> generate a second tenant repo from the template. Prove that composer can pick between the two, that changing one has no effect on the other, and that a template update produces a working PR against both.</p>
+<p><strong>Why this phase:</strong> problems in the multi-tenant architecture only appear once N&gt;1. Doing this before scale-up is much cheaper than after.</p>
+</div>
+
+<div class="phase">
+<h4>Phase 10 — Hardening (ongoing)</h4>
+<p>Observability (§26), the bump-all mechanism for glue-core (§24), operational runbooks for the failure modes in §6/§8/§10, security review of the federation trust boundary. This phase never fully closes — it is the ongoing platform work after the system is live.</p>
+</div>
+
+<h2 id="local-dev">22. Local dev workflows</h2>
+<h4>Tenant developer, day-to-day</h4>
+<p><code>npm run dev</code> in the tenant repo. Full HMR against local components and services. The prebuild hook regenerates types from schemas so a schema edit reflects instantly in TypeScript autocomplete.</p>
+<h4>Tenant developer, previewing in composer</h4>
+<p><code>npm run dev:expose</code> serves the composer-facing remoteEntry.js at <code>localhost:3001</code>. In composer, opening a URL like <code>?tenant=acme&amp;remoteOverride=http://localhost:3001/_next/static/chunks/remoteEntry.js</code> uses that URL for the session only, without touching <code>tenant_registry</code>. Session-scoped, disappears on close.</p>
+<h4>Platform developer, working on a shared package</h4>
+<p>Use <code>npm link</code> or <code>yarn link</code> against a checked-out tenant repo. Once the change is stable, publish a pre-release version (<code>2.4.0-next.1</code>), bump the tenant's <code>package.json</code>, and confirm before publishing a stable version.</p>
+
+<h2 id="cicd">23. CI/CD pipelines end-to-end</h2>
+<h4>Shared packages (glue-types, -components, -core, -data, -services)</h4>
+<ol>
+<li>Lint, type-check, test.</li>
+<li>Semver-check against the previously published version — any breaking change without a major bump fails.</li>
+<li>Publish on merge to main.</li>
+<li>Trigger the bump-all workflow to open PRs against every tenant repo.</li>
+</ol>
+<h4>Tenant repo (single atomic pipeline)</h4>
+<ol>
+<li>Install, lint (including the federation-reexport rule), generate types from schemas.</li>
+<li>Type-check, unit-test.</li>
+<li>Two parallel build outputs from the same commit SHA:
+<ul>
+<li><code>next build</code> → the storefront (deployed to the tenant's hosting).</li>
+<li><code>next build --federation-only</code> → remoteEntry.js (uploaded to <code>cdn.clouda.io/tenants/&lt;slug&gt;/&lt;sha&gt;/</code>).</li>
+</ul>
+</li>
+<li>Compute SRI hash of the uploaded remoteEntry.js.</li>
+<li>Deploy the storefront to hosting with <code>BUILD_COMMIT=&lt;sha&gt;</code> injected.</li>
+<li>Call <code>publish-service</code> with a JWT signed with the tenant's repo key, passing SHA, version, remote URL, SRI hash, idempotency key. Retry with the same idempotency key on transient failure.</li>
+<li>On success, publish-service updates <code>tenant_registry</code> and webhooks composer + storefront to invalidate caches.</li>
+</ol>
+<h4>glue-composer</h4>
+<p>Standard build/deploy. Not touched during tenant work. Redeploys are triggered by composer feature work only.</p>
+
+<h2 id="versioning">24. Version strategy across all packages</h2>
+<table>
+<tr><th>Package</th><th>Pinned or ranged in tenant?</th><th>Rationale</th></tr>
+<tr><td>glue-types</td><td>Exact pin</td><td>Contract changes must be intentional per-tenant</td></tr>
+<tr><td>glue-core</td><td>Exact pin</td><td>Rendering behavior; tenants opt into upgrades</td></tr>
+<tr><td>glue-components</td><td>Caret (^)</td><td>Additive-only rule (§5) makes minor bumps safe</td></tr>
+<tr><td>glue-data</td><td>Exact pin</td><td>DB-schema-adjacent; upgrades coordinated</td></tr>
+<tr><td>glue-services</td><td>Exact pin</td><td>Hook contract stability</td></tr>
+<tr><td>react, react-dom</td><td>Exact pin (§7)</td><td>Composer singleton constraint</td></tr>
+</table>
+<h4>Bump-all mechanism</h4>
+<p>A scheduled GitHub Actions workflow runs against every tenant repo on publish of any pinned shared package. It opens a PR bumping the pin; the tenant's own CI runs; the tenant merges when convenient. Combined with the template update workflow (§9), most tenants stay within one minor version of the platform head without any manual intervention.</p>
+
+<h2 id="testing">25. Testing strategy</h2>
+<table>
+<tr><th>Repo</th><th>What to test</th></tr>
+<tr><td>glue-types</td><td>tsc passes; no runtime code to test.</td></tr>
+<tr><td>glue-components</td><td>Per-component unit tests; schema.jsons validated against a JSON Schema meta-schema; visual regression via Chromatic or similar.</td></tr>
+<tr><td>glue-data</td><td>Tenant-scoping is <em>structural</em>: a call site can't omit tenantId — enforce via TypeScript signatures and test that a query returns 0 results when the tenant differs. LRU cache eviction and stale-if-error path.</td></tr>
+<tr><td>glue-services</td><td>Publish validation rejects schema-violating props; hook contract runs with and without hooks; HMAC verifier passes/fails correctly.</td></tr>
+<tr><td>glue-core</td><td>SectionRenderer output for a mock registry, including tolerance of unknown component types; theme merge precedence; SRI mismatch rejection in composer-registry.</td></tr>
+<tr><td>tenant repo (template)</td><td>An integration test in the template itself: boots the app against a seeded DB, renders a known page, snapshots the output. Every generated tenant inherits this test.</td></tr>
+<tr><td>glue-composer</td><td>Schema-driven editor rendering against fixture schemas; publish-time validation UI; iframe preview receives postMessage and re-renders.</td></tr>
+<tr><td>publish-service</td><td>Idempotency; JWT auth rejects mis-signed tokens; SRI mismatch rejects the publish; atomic write.</td></tr>
+</table>
+
+<h2 id="observability">26. Observability &amp; failure UX</h2>
+<h4>Tags on every log/trace</h4>
+<p><code>tenantSlug</code>, <code>glueCoreVersion</code>, <code>deployedCommit</code>. This makes per-tenant issue filtering trivial and lets you spot version-adoption patterns.</p>
+<h4>Metrics to dashboard</h4>
+<ul>
+<li>Composer: remote load success rate, per-tenant. Alert on a specific tenant's rate dropping.</li>
+<li>Storefront: <code>tenant_registry</code> cache hit rate, stale-if-error events, invalidate-webhook receipts. Alert on stale-if-error being frequent.</li>
+<li>publish-service: publish success rate, SRI-mismatch rejections (any nonzero is a security event to review), rollback frequency.</li>
+<li>Platform-wide: glueCoreVersion adoption histogram — spot tenants stuck on old versions.</li>
+</ul>
+<h4>Failure UX in composer</h4>
+<p>A tenant's remote failing to load should not gray-screen composer. It should show the editor: "Tenant Acme's build v42 (SHA 9a7f2c1b) can't be loaded. Recent versions: [v41, v40, v39]. Roll back?" — with a button that calls publish-service's rollback endpoint. This turns a broken deploy from a support ticket into a self-service recovery.</p>
+
+<h2 id="onboarding">27. Tenant onboarding checklist</h2>
+<ol>
+<li>Generate the tenant repo from the current template (Copier); commit the <code>.copier-answers.yml</code>.</li>
+<li>Set <code>TENANT_SLUG</code> and <code>TENANT_FEDERATION_NAME</code>.</li>
+<li>Provision the tenant's database (§15's isolation mode); record <code>dbConnectionRef</code>.</li>
+<li>Generate the tenant's JWT signing keypair; store the private key in CI secrets; register the public key against the tenant row.</li>
+<li>Insert the initial <code>tenant_registry</code> row (slug, domains, isolationMode, glueCoreVersion — remoteEntryUrl left null until first deploy).</li>
+<li>Wire the tenant CI with the pipeline described in §23.</li>
+<li>Create the tenant's GitHub team scoped to this one repo; add their developers.</li>
+<li>Trigger the first deploy; verify publish-service accepts it and composer can load the tenant.</li>
+<li>Hand off the tenant developer onboarding docs (theme tokens, component patterns, schema evolution rules).</li>
+</ol>
+
+<h2 id="appendix">28. Appendix</h2>
+<h3>Environment variables</h3>
+<table>
+<tr><th>Repo</th><th>Variable</th><th>Purpose</th></tr>
+<tr><td>tenant-repo</td><td><code>TENANT_SLUG</code></td><td>This deployment's tenant identity</td></tr>
+<tr><td>tenant-repo</td><td><code>TENANT_FEDERATION_NAME</code></td><td>Unique remote name for composer</td></tr>
+<tr><td>tenant-repo</td><td><code>BUILD_COMMIT</code></td><td>Injected by CI, checked by drift warning (§4)</td></tr>
+<tr><td>tenant-repo</td><td><code>COMPOSER_WEBHOOK_SECRET</code></td><td>HMAC key for §6 invalidate endpoint</td></tr>
+<tr><td>tenant-repo</td><td><code>PUBLISH_SERVICE_PRIVATE_KEY</code> (CI only)</td><td>JWT signing key for §8</td></tr>
+<tr><td>glue-composer</td><td><code>TENANT_REGISTRY_DB_URI</code></td><td>Registry connection</td></tr>
+<tr><td>glue-composer</td><td><code>COMPOSER_WEBHOOK_SECRET</code></td><td>HMAC key, same value per-tenant</td></tr>
+<tr><td>publish-service</td><td><code>TENANT_REGISTRY_DB_URI</code></td><td>Registry connection</td></tr>
+<tr><td>publish-service</td><td><code>CDN_BUCKET</code></td><td>Where remoteEntry.js lives, for HEAD checks</td></tr>
+</table>
+
+<h3>Glossary</h3>
+<ul>
+<li><strong>Deploy atomicity (§4):</strong> the property that the storefront's compiled code and the composer's remote view of it are always built from the same commit and made visible together.</li>
+<li><strong>Additive-only schemas (§5):</strong> the rule that <code>schema.json</code> fields may be added or deprecated but never renamed or removed.</li>
+<li><strong>Stale-if-error (§6):</strong> the fallback behavior where the storefront serves the last good tenant_registry snapshot if the registry is unreachable.</li>
+<li><strong>Remote / host (Module Federation):</strong> a tenant repo is a <em>remote</em> (exposes components); <code>glue-composer</code> is the only <em>host</em>. The storefront is neither.</li>
+<li><strong>publish-service (§8, §20):</strong> the small service that owns all writes to <code>tenant_registry</code>, enforcing auth, verification, idempotency, and SRI checks in one place.</li>
+</ul>
+
+</body>
+</html>
